@@ -3,3 +3,5 @@ dist
 .env
 server/dist
 coverage
+
+.vercel
