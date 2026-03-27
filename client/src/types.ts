@@ -97,3 +97,16 @@ export type SessionStatus =
   | "listening"
   | "speaking"
   | "error";
+
+export type RealtimeEventLogItem = {
+  id: string;
+  type: string;
+  detail: string;
+  timestamp: string;
+};
+
+export type AudioInputDevice = {
+  deviceId: string;
+  label: string;
+  isDefault: boolean;
+};

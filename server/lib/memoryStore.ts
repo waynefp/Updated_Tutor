@@ -1,8 +1,12 @@
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { LessonReflection, TutorMemory } from "./types.js";
 
-const memoryPath = path.resolve(process.cwd(), "server", "data", "default-user.json");
+const seedMemoryPath = path.resolve(process.cwd(), "server", "data", "default-user.json");
+const memoryPath = process.env.VERCEL
+  ? path.join(os.tmpdir(), "parola-viva-memory.json")
+  : seedMemoryPath;
 
 const fallbackSeed: TutorMemory = {
   userId: process.env.DEFAULT_USER_ID ?? "wayne",
@@ -64,7 +68,12 @@ async function ensureFile() {
     await fs.access(memoryPath);
   } catch {
     await fs.mkdir(path.dirname(memoryPath), { recursive: true });
-    await fs.writeFile(memoryPath, JSON.stringify(fallbackSeed, null, 2), "utf8");
+    try {
+      const seed = await fs.readFile(seedMemoryPath, "utf8");
+      await fs.writeFile(memoryPath, seed, "utf8");
+    } catch {
+      await fs.writeFile(memoryPath, JSON.stringify(fallbackSeed, null, 2), "utf8");
+    }
   }
 }
 

@@ -2,12 +2,12 @@
   "userId": "wayne",
   "learnerName": "Wayne",
   "createdAt": "2026-03-26T00:00:00.000Z",
-  "updatedAt": "2026-03-26T21:37:06.512Z",
+  "updatedAt": "2026-03-27T00:00:00.000Z",
   "profile": {
     "targetLanguage": "Italian",
     "nativeLanguage": "English",
     "levelEstimate": "A0-A1 emerging speaker",
-    "confidence": "Confidence is modest but improving with practice and repetition.",
+    "confidence": "Building confidence with short replies and gentle support.",
     "goals": [
       "Hold short everyday conversations in Italian",
       "Get comfortable responding without mentally translating every word",
@@ -26,118 +26,18 @@
       "Regional food"
     ],
     "correctionPriorities": [
-      "Focus on one pronunciation or phrase structure at a time.",
-      "Use positive reinforcement and brief recasts.",
-      "Limit grammar explanations to brief usable tips.",
       "Correct one high-impact issue at a time",
       "Favor spoken recasts over grammar lectures",
-      "Keep explanations brief and usable"
+      "Keep explanations brief and usable",
+      "Do not over-focus on minor pronunciation differences in early sessions"
     ],
-    "nextSessionFocus": "Continue practicing introductions and basic personal info with emphasis on spontaneous responses and follow-up questions.",
+    "nextSessionFocus": "Simple self-introductions and easy follow-up questions",
     "tutorNotes": [
-      "Keep session pace gentle and calm to reduce pressure.",
-      "Encourage verbal repetition for retention and confidence.",
-      "Praise attempts promptly to maintain motivation.",
       "Start gentle, keep the pace calm, and reward attempts quickly.",
-      "Use mostly Italian with short English rescue lines only when needed."
+      "Lean on English support at the start when it helps confidence.",
+      "Treat pronunciation lightly unless it blocks understanding."
     ]
   },
-  "recentVocabulary": [
-    {
-      "italian": "Mi chiamo",
-      "english": "My name is",
-      "example": "Mi chiamo Wayne."
-    },
-    {
-      "italian": "Di dove sei?",
-      "english": "Where are you from?",
-      "example": "Di dove sei? Sono di Londra."
-    },
-    {
-      "italian": "Come ti chiami?",
-      "english": "What is your name?",
-      "example": "Come ti chiami? Mi chiamo Parola Viva."
-    },
-    {
-      "italian": "E tu?",
-      "english": "And you?",
-      "example": "Mi chiamo Wayne. E tu?"
-    }
-  ],
-  "sessions": [
-    {
-      "id": "2db9162f-9016-4b3a-bb51-403b603cdf03",
-      "title": "Introductions and Basic Personal Information Practice",
-      "focus": "Practice introductions, names, where you are from, and one or two easy follow-up questions.",
-      "presetLabel": "Soft landing",
-      "dateIso": "2026-03-26T21:36:56.897Z",
-      "durationMinutes": 1,
-      "summary": "In this session, Wayne practiced introducing himself in Italian, stating his name and origin, and forming simple follow-up questions. The tutor maintained a gentle pace and encouraged Wayne to speak in Italian with minimal English support. Repetition of core phrases was used to build confidence, and attempts were rewarded to promote positive learning experiences.",
-      "strengths": [
-        "Wayne can say 'Mi chiamo Wayne' with growing confidence.",
-        "He responds well to simple, familiar questions about identity and origin.",
-        "Shows good effort and maintains engagement despite beginner-level challenges."
-      ],
-      "needsWork": [
-        "Pronunciation needs gentle correction to improve clarity, especially for phrases like 'Mi chiamo'.",
-        "Needs more fluidity moving from prepared phrases to natural follow-up questions.",
-        "Vocabulary remains limited to very basic introductions; more varied questions should be practiced."
-      ],
-      "nextDrills": [
-        "Say aloud and repeat three times: 'Mi chiamo [your name]. E tu, come ti chiami?'.",
-        "Practice responding to 'Di dove sei?' with 'Sono di [your city]. E tu?'.",
-        "Ask and answer: 'Come stai?' with short replies like 'Bene, grazie.' or 'Così così.'.",
-        "Form three easy follow-up questions about origin and name to ask a partner: 'Come ti chiami?', 'Di dove sei?', 'Hai fratelli?'.",
-        "Listen and repeat a short dialogue introducing oneself and asking a simple question about origin."
-      ],
-      "cultureMoments": [
-        "Discuss the importance of names and greetings in Italian culture, often accompanied by a handshake or kiss on the cheek.",
-        "Briefly introduce common Italian regions known for unique dialects in greetings, enhancing cultural awareness."
-      ],
-      "vocabulary": [
-        {
-          "italian": "Mi chiamo",
-          "english": "My name is",
-          "example": "Mi chiamo Wayne."
-        },
-        {
-          "italian": "Di dove sei?",
-          "english": "Where are you from?",
-          "example": "Di dove sei? Sono di Londra."
-        },
-        {
-          "italian": "Come ti chiami?",
-          "english": "What is your name?",
-          "example": "Come ti chiami? Mi chiamo Parola Viva."
-        },
-        {
-          "italian": "E tu?",
-          "english": "And you?",
-          "example": "Mi chiamo Wayne. E tu?"
-        }
-      ]
-    },
-    {
-      "id": "72e89c70-c1ce-43dd-bc75-84b1da5dc5cc",
-      "title": "Short speaking checkpoint",
-      "focus": "Practice introductions, names, where you are from, and one or two easy follow-up questions.",
-      "presetLabel": "Soft landing",
-      "dateIso": "2026-03-26T20:28:44.837Z",
-      "durationMinutes": 1,
-      "summary": "A brief Italian speaking session was captured. The next lesson should revisit the same scene with one slightly longer answer.",
-      "strengths": [
-        "Showed up and produced spoken Italian in context."
-      ],
-      "needsWork": [
-        "Build slightly longer answers with less hesitation."
-      ],
-      "nextDrills": [
-        "Repeat the practice introductions, names, where you are from, and one or two easy follow-up questions. scene with two-sentence answers."
-      ],
-      "cultureMoments": [
-        "Keep the next lesson anchored in a real, modern Italian daily-life setting."
-      ],
-      "vocabulary": []
-    }
-  ]
+  "recentVocabulary": [],
+  "sessions": []
 }
