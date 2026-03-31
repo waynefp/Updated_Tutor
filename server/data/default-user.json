@@ -2,12 +2,12 @@
   "userId": "wayne",
   "learnerName": "Wayne",
   "createdAt": "2026-03-26T00:00:00.000Z",
-  "updatedAt": "2026-03-27T00:00:00.000Z",
+  "updatedAt": "2026-03-31T02:21:41.514Z",
   "profile": {
     "targetLanguage": "Italian",
     "nativeLanguage": "English",
     "levelEstimate": "A0-A1 emerging speaker",
-    "confidence": "Building confidence with short replies and gentle support.",
+    "confidence": "Still building confidence with short replies; needs continued gentle support",
     "goals": [
       "Hold short everyday conversations in Italian",
       "Get comfortable responding without mentally translating every word",
@@ -26,18 +26,170 @@
       "Regional food"
     ],
     "correctionPriorities": [
+      "Focus on one high-impact correction each session",
+      "Use spoken recasts over explanations",
+      "Keep feedback brief and actionable",
+      "Avoid overemphasis on pronunciation at this stage",
       "Correct one high-impact issue at a time",
-      "Favor spoken recasts over grammar lectures",
-      "Keep explanations brief and usable",
-      "Do not over-focus on minor pronunciation differences in early sessions"
+      "Favor spoken recasts over grammar lectures"
     ],
-    "nextSessionFocus": "Simple self-introductions and easy follow-up questions",
+    "nextSessionFocus": "Simple self-introductions and easy follow-up questions to build sentence formation and fluency",
     "tutorNotes": [
-      "Start gentle, keep the pace calm, and reward attempts quickly.",
-      "Lean on English support at the start when it helps confidence.",
-      "Treat pronunciation lightly unless it blocks understanding."
+      "Keep session pacing gentle and supportive.",
+      "Encourage repetition aloud of key phrases to improve recall.",
+      "Use English when necessary for confidence but gradually reduce.",
+      "Focus on making full simple sentences instead of single words or mixed languages.",
+      "Reward brave attempts quickly to build learner motivation.",
+      "Continue gentle pacing and immediate positive feedback."
     ]
   },
-  "recentVocabulary": [],
-  "sessions": []
+  "recentVocabulary": [
+    {
+      "italian": "Ciao",
+      "english": "Hello/Bye",
+      "example": "Ciao! Come stai?"
+    },
+    {
+      "italian": "Bene",
+      "english": "Good/Fine",
+      "example": "Sto bene, grazie."
+    },
+    {
+      "italian": "Come stai?",
+      "english": "How are you?",
+      "example": "Ciao! Come stai?"
+    },
+    {
+      "italian": "Mi chiamo...",
+      "english": "My name is...",
+      "example": "Mi chiamo Marco."
+    },
+    {
+      "italian": "Di dove sei?",
+      "english": "Where are you from?",
+      "example": "Di dove sei? Sono di Roma."
+    },
+    {
+      "italian": "Sono a casa",
+      "english": "I am at home",
+      "example": "Adesso sono a casa."
+    },
+    {
+      "italian": "Come ti chiami?",
+      "english": "What is your name?",
+      "example": "Come ti chiami? Mi chiamo Marco."
+    }
+  ],
+  "sessions": [
+    {
+      "id": "17997740-3316-4f76-9de0-9c77c580df88",
+      "title": "Reflection on First Italian Introduction Practice",
+      "focus": "Practice introductions, names, where you are from, and one or two easy follow-up questions.",
+      "presetLabel": "Soft landing",
+      "dateIso": "2026-03-31T02:21:32.705Z",
+      "durationMinutes": 1,
+      "summary": "The session focused on practicing simple introductions and basic conversational phrases about well-being and location. The learner showed effort in attempting Italian responses but often switched to other languages or incomplete phrases. There were some successful uses of greetings and simple questions, but the learner struggled with forming coherent sentences and needed frequent prompts. Positive reinforcement was given to encourage attempts and ensure a low-pressure environment.",
+      "strengths": [
+        "Learner greeted and used basic phrases like 'bene' and 'e come stai?'.",
+        "Shows willingness to try speaking Italian aloud despite difficulty.",
+        "Responds when prompted and repeats some phrases.",
+        "Maintains a calm and positive attitude during the session."
+      ],
+      "needsWork": [
+        "Forming full simple sentences introducing oneself clearly.",
+        "Sticking to Italian during the exchanges to build confidence and fluency.",
+        "Answering follow-up questions about origin and current activity in Italian.",
+        "Using common question words and simple prepositions for locations."
+      ],
+      "nextDrills": [
+        "Practice saying 'Mi chiamo ___' (My name is ___) aloud repeatedly.",
+        "Short drill: 'Di dove sei?' with responses like 'Sono di ___.'",
+        "Practice short dialogues of greeting and asking 'Come stai?' with simple answers.",
+        "Simple Q&A about current location using 'Dove sei?' and 'Sono a casa.'"
+      ],
+      "cultureMoments": [
+        "Discuss the common Italian greeting 'Ciao' and when to use it.",
+        "Introduce how Italians ask 'Di dove sei?' as a way to start conversation.",
+        "Highlight the Italian concept of saying 'a casa' (at home) to express location.",
+        "Briefly mention typical Italian home cooking as a topic to connect with 'cucina' (kitchen)."
+      ],
+      "vocabulary": [
+        {
+          "italian": "Ciao",
+          "english": "Hello/Bye",
+          "example": "Ciao! Come stai?"
+        },
+        {
+          "italian": "Bene",
+          "english": "Good/Fine",
+          "example": "Sto bene, grazie."
+        },
+        {
+          "italian": "Come stai?",
+          "english": "How are you?",
+          "example": "Ciao! Come stai?"
+        },
+        {
+          "italian": "Mi chiamo...",
+          "english": "My name is...",
+          "example": "Mi chiamo Marco."
+        },
+        {
+          "italian": "Di dove sei?",
+          "english": "Where are you from?",
+          "example": "Di dove sei? Sono di Roma."
+        },
+        {
+          "italian": "Sono a casa",
+          "english": "I am at home",
+          "example": "Adesso sono a casa."
+        }
+      ]
+    },
+    {
+      "id": "c2078756-22e3-4244-b693-7513a120c356",
+      "title": "First Italian Speaking Practice: Introductions and Basic Questions",
+      "focus": "Practice introductions, names, where you are from, and one or two easy follow-up questions.",
+      "presetLabel": "Soft landing",
+      "dateIso": "2026-03-31T00:56:14.259Z",
+      "durationMinutes": 1,
+      "summary": "In this session, we focused on practicing simple Italian introductions, including stating one's name and origin, along with easy follow-up questions. The learner showed initial hesitancy but managed to respond with short Italian phrases with some help and encouragement. The tutor maintained a calm pace and provided immediate positive feedback. Although the learner mixed in Spanish briefly, the session ended with attempts to use Italian question words.",
+      "strengths": [
+        "Learner was willing to try speaking Italian despite initial hesitation.",
+        "Responded correctly to simple prompts like 'Bene.'",
+        "Showed readiness to practice follow-up questions with tutor prompting."
+      ],
+      "needsWork": [
+        "Learner's confidence to speak without resorting to other languages or silence.",
+        "Pronunciation clarity to improve understanding, though not a major focus yet.",
+        "Building familiarity with Italian question words to smoothly ask and answer."
+      ],
+      "nextDrills": [
+        "Practice saying 'My name is...' and asking 'What is your name?' aloud with short role-play.",
+        "Use short question and answer drills: 'Where are you from?' / 'I am from...'.",
+        "Repeat simple greetings and responses aloud to build confidence."
+      ],
+      "cultureMoments": [
+        "Discuss simple greetings typical in Italian culture, like the use of 'Bene' or 'Ciao.'",
+        "Introduce a brief note on Italian naming customs and region origins as common conversation starters."
+      ],
+      "vocabulary": [
+        {
+          "italian": "Come ti chiami?",
+          "english": "What is your name?",
+          "example": "Come ti chiami? Mi chiamo Marco."
+        },
+        {
+          "italian": "Di dove sei?",
+          "english": "Where are you from?",
+          "example": "Di dove sei? Sono di Roma."
+        },
+        {
+          "italian": "Bene",
+          "english": "Good/Well",
+          "example": "Come stai? Bene, grazie."
+        }
+      ]
+    }
+  ]
 }

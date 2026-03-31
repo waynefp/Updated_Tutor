@@ -56,6 +56,7 @@ export default function App() {
 
   const {
     endSession,
+    eventLog,
     error: sessionError,
     liveTutorCaption,
     liveUserCaption,
@@ -319,6 +320,20 @@ export default function App() {
 
           {(sessionError || loadError) && (
             <div className="inline-error">{sessionError ?? loadError}</div>
+          )}
+
+          {eventLog.length > 0 && (
+            <div className="caption-well" aria-live="polite">
+              <div>
+                <small>Connection log</small>
+                {eventLog.slice(0, 6).map((item) => (
+                  <p key={item.id}>
+                    <strong>{item.type}</strong>
+                    {item.detail ? `: ${item.detail}` : ""}
+                  </p>
+                ))}
+              </div>
+            </div>
           )}
         </section>
       </section>

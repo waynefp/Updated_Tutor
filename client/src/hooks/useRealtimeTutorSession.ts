@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createRealtimeAnswer } from "../lib/api";
+import { arrayBufferToBase64, decodePcm16Base64 } from "../lib/audio";
+import { createLiveSession } from "../lib/api";
 import type {
   LessonTurn,
   RealtimeEventLogItem,
@@ -7,21 +8,30 @@ import type {
   SessionStatus
 } from "../types";
 
+const GEMINI_WS_URL =
+  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+
 type StartSessionInput = {
   deviceId?: string;
   focus: string;
   presetLabel: string;
 };
 
-type RealtimeServerEvent = {
-  type: string;
-  delta?: string;
-  transcript?: string;
-  response?: {
-    status?: string;
-  };
-  error?: {
-    message?: string;
+type GeminiServerMessage = {
+  setupComplete?: Record<string, never>;
+  serverContent?: {
+    generationComplete?: boolean;
+    inputTranscription?: { text?: string };
+    interrupted?: boolean;
+    modelTurn?: {
+      parts?: Array<{
+        inlineData?: { data?: string; mimeType?: string };
+        text?: string;
+      }>;
+    };
+    outputTranscription?: { text?: string };
+    turnComplete?: boolean;
+    waitingForInput?: boolean;
   };
 };
 
@@ -36,17 +46,22 @@ const buildTurn = (
 });
 
 export function useRealtimeTutorSession() {
-  const peerRef = useRef<RTCPeerConnection | null>(null);
-  const dataChannelRef = useRef<RTCDataChannel | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const startedAtRef = useRef<string | null>(null);
-  const statsIntervalRef = useRef<number | null>(null);
-  const lastStatsSignatureRef = useRef<string>("");
   const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelIntervalRef = useRef<number | null>(null);
   const speechDetectedRef = useRef(false);
+  const startedAtRef = useRef<string | null>(null);
+  const currentStatusRef = useRef<SessionStatus>("idle");
+  const transcriptRef = useRef<LessonTurn[]>([]);
+  const nextPlayTimeRef = useRef(0);
+  const sessionActiveRef = useRef(false);
+  const currentUserCaptionRef = useRef("");
+  const currentTutorCaptionRef = useRef("");
+  const committedUserCaptionRef = useRef("");
+  const committedTutorCaptionRef = useRef("");
 
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -56,47 +71,10 @@ export function useRealtimeTutorSession() {
   const [micLevel, setMicLevel] = useState(0);
   const [transcript, setTranscript] = useState<LessonTurn[]>([]);
 
-  const cleanup = useCallback(() => {
-    if (statsIntervalRef.current) {
-      window.clearInterval(statsIntervalRef.current);
-      statsIntervalRef.current = null;
-    }
-    if (levelIntervalRef.current) {
-      window.clearInterval(levelIntervalRef.current);
-      levelIntervalRef.current = null;
-    }
-    lastStatsSignatureRef.current = "";
-    speechDetectedRef.current = false;
-    setMicLevel(0);
-
-    analyserRef.current?.disconnect();
-    analyserRef.current = null;
-
-    if (audioContextRef.current) {
-      void audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    dataChannelRef.current?.close();
-    dataChannelRef.current = null;
-
-    peerRef.current?.getSenders().forEach((sender) => {
-      sender.track?.stop();
-    });
-    peerRef.current?.close();
-    peerRef.current = null;
-
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    localStreamRef.current = null;
-
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.pause();
-      remoteAudioRef.current.srcObject = null;
-      remoteAudioRef.current = null;
-    }
+  const updateStatus = useCallback((nextStatus: SessionStatus) => {
+    currentStatusRef.current = nextStatus;
+    setStatus(nextStatus);
   }, []);
-
-  useEffect(() => cleanup, [cleanup]);
 
   const appendEvent = useCallback((type: string, detail: string) => {
     setEventLog((previous) =>
@@ -112,129 +90,97 @@ export function useRealtimeTutorSession() {
     );
   }, []);
 
-  const wireTrackDebugging = useCallback(
-    (track: MediaStreamTrack) => {
-      appendEvent(
-        "client.mic.track",
-        `Microphone track ${track.readyState} (${track.enabled ? "enabled" : "disabled"}).`
-      );
+  const appendTranscriptTurn = useCallback(
+    (speaker: LessonTurn["speaker"], text: string) => {
+      const normalizedText = text.trim();
+      if (!normalizedText) return;
 
-      track.addEventListener("mute", () => {
-        appendEvent("client.mic.mute", "Microphone track reported mute.");
-      });
-      track.addEventListener("unmute", () => {
-        appendEvent("client.mic.unmute", "Microphone track reported unmute.");
-      });
-      track.addEventListener("ended", () => {
-        appendEvent("client.mic.ended", "Microphone track ended.");
-      });
+      const nextTranscript = [
+        ...transcriptRef.current,
+        buildTurn(speaker, normalizedText)
+      ];
+      transcriptRef.current = nextTranscript;
+      setTranscript(nextTranscript);
     },
-    [appendEvent]
+    []
   );
 
-  const promptReply = useCallback(() => {
-    const dataChannel = dataChannelRef.current;
-    if (!dataChannel || dataChannel.readyState !== "open") {
-      appendEvent("client.prompt_reply.skipped", "Data channel is not open.");
-      return;
+  const finalizeTurn = useCallback(() => {
+    const userText = currentUserCaptionRef.current.trim();
+    if (userText && userText !== committedUserCaptionRef.current) {
+      committedUserCaptionRef.current = userText;
+      appendTranscriptTurn("you", userText);
     }
 
-    dataChannel.send(
-      JSON.stringify({
-        type: "response.create",
-        response: {
-          output_modalities: ["audio"]
-        }
-      })
-    );
-    appendEvent("client.response.create", "Manual tutor reply requested.");
-  }, [appendEvent]);
-
-  const commitSpeechTurn = useCallback(() => {
-    const dataChannel = dataChannelRef.current;
-    if (!dataChannel || dataChannel.readyState !== "open") {
-      appendEvent("client.commit.skipped", "Data channel is not open.");
-      return;
+    const tutorText = currentTutorCaptionRef.current.trim();
+    if (tutorText && tutorText !== committedTutorCaptionRef.current) {
+      committedTutorCaptionRef.current = tutorText;
+      appendTranscriptTurn("tutor", tutorText);
     }
 
-    dataChannel.send(
-      JSON.stringify({
-        type: "input_audio_buffer.commit"
-      })
-    );
-    appendEvent("client.input_audio_buffer.commit", "Manual audio commit requested.");
+    currentUserCaptionRef.current = "";
+    currentTutorCaptionRef.current = "";
+    setLiveUserCaption("");
+    setLiveTutorCaption("");
+  }, [appendTranscriptTurn]);
 
-    dataChannel.send(
-      JSON.stringify({
-        type: "response.create",
-        response: {
-          output_modalities: ["audio"]
-        }
-      })
-    );
-    appendEvent("client.response.create", "Tutor reply requested after manual commit.");
-  }, [appendEvent]);
+  const stopAudioResources = useCallback(() => {
+    if (levelIntervalRef.current) {
+      window.clearInterval(levelIntervalRef.current);
+      levelIntervalRef.current = null;
+    }
 
-  const startTransportDiagnostics = useCallback(
-    (peerConnection: RTCPeerConnection) => {
-      if (statsIntervalRef.current) {
-        window.clearInterval(statsIntervalRef.current);
-      }
+    speechDetectedRef.current = false;
+    setMicLevel(0);
 
-      statsIntervalRef.current = window.setInterval(async () => {
-        try {
-          const stats = await peerConnection.getStats();
-          let outboundAudioReport = "";
+    analyserRef.current?.disconnect();
+    analyserRef.current = null;
 
-          stats.forEach((report) => {
-            if (report.type === "outbound-rtp" && report.kind === "audio") {
-              const packetsSent =
-                typeof report.packetsSent === "number" ? report.packetsSent : 0;
-              const bytesSent =
-                typeof report.bytesSent === "number" ? report.bytesSent : 0;
-              outboundAudioReport = `packets=${packetsSent} bytes=${bytesSent}`;
-            }
-          });
+    processorRef.current?.disconnect();
+    if (processorRef.current) {
+      processorRef.current.onaudioprocess = null;
+    }
+    processorRef.current = null;
 
-          if (!outboundAudioReport || outboundAudioReport === lastStatsSignatureRef.current) {
-            return;
-          }
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
 
-          lastStatsSignatureRef.current = outboundAudioReport;
-          appendEvent("client.stats.audio_out", outboundAudioReport);
-        } catch (statsError) {
-          appendEvent(
-            "client.stats.error",
-            statsError instanceof Error ? statsError.message : "Unable to read WebRTC stats."
-          );
-        }
-      }, 2000);
-    },
-    [appendEvent]
-  );
+    if (audioContextRef.current) {
+      void audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    nextPlayTimeRef.current = 0;
+  }, []);
+
+  const cleanup = useCallback(() => {
+    sessionActiveRef.current = false;
+
+    const ws = socketRef.current;
+    socketRef.current = null;
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+      ws.close();
+    }
+
+    stopAudioResources();
+    currentUserCaptionRef.current = "";
+    currentTutorCaptionRef.current = "";
+    committedUserCaptionRef.current = "";
+    committedTutorCaptionRef.current = "";
+  }, [stopAudioResources]);
+
+  useEffect(() => cleanup, [cleanup]);
 
   const startMicrophoneDiagnostics = useCallback(
-    async (stream: MediaStream) => {
+    (analyser: AnalyserNode) => {
       if (levelIntervalRef.current) {
         window.clearInterval(levelIntervalRef.current);
       }
 
-      const audioContext = new AudioContext();
-      await audioContext.resume();
-
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
-      source.connect(analyser);
-
-      audioContextRef.current = audioContext;
       analyserRef.current = analyser;
-
       const samples = new Uint8Array(analyser.fftSize);
       levelIntervalRef.current = window.setInterval(() => {
-        if (!analyserRef.current) {
-          return;
-        }
+        if (!analyserRef.current) return;
 
         analyserRef.current.getByteTimeDomainData(samples);
         let sumSquares = 0;
@@ -250,75 +196,166 @@ export function useRealtimeTutorSession() {
         const isSpeaking = level > 0.09;
         if (isSpeaking && !speechDetectedRef.current) {
           speechDetectedRef.current = true;
-          appendEvent("client.mic.activity", `Speech detected locally (level=${level.toFixed(2)}).`);
+          if (currentStatusRef.current === "ready") {
+            updateStatus("listening");
+          }
+          appendEvent(
+            "client.mic.activity",
+            `Speech detected locally (level=${level.toFixed(2)}).`
+          );
         } else if (!isSpeaking && speechDetectedRef.current) {
           speechDetectedRef.current = false;
+          if (currentStatusRef.current === "listening") {
+            updateStatus("ready");
+          }
           appendEvent("client.mic.silence", "Local mic level returned to silence.");
         }
       }, 250);
     },
-    [appendEvent]
+    [appendEvent, updateStatus]
   );
 
-  const handleServerEvent = useCallback((event: RealtimeServerEvent) => {
-    let detail = "";
-    if (event.transcript) {
-      detail = event.transcript;
-    } else if (event.delta) {
-      detail = event.delta;
-    } else if (event.error?.message) {
-      detail = event.error.message;
-    } else if (event.response?.status) {
-      detail = event.response.status;
-    }
-    appendEvent(event.type, detail);
+  const playAudioChunk = useCallback((base64Pcm: string) => {
+    const audioContext = audioContextRef.current;
+    if (!audioContext) return;
 
-    switch (event.type) {
-      case "session.created":
-      case "session.updated":
-        setStatus("ready");
-        break;
-      case "input_audio_buffer.speech_started":
-        setStatus("listening");
-        break;
-      case "input_audio_buffer.speech_stopped":
-        setStatus("ready");
-        break;
-      case "response.created":
-        setStatus("speaking");
-        break;
-      case "response.done":
-        setStatus(event.response?.status === "failed" ? "error" : "ready");
-        break;
-      case "conversation.item.input_audio_transcription.delta":
-        setLiveUserCaption((previous) => previous + (event.delta ?? ""));
-        break;
-      case "conversation.item.input_audio_transcription.completed":
-        if (event.transcript) {
-          setTranscript((previous) => [...previous, buildTurn("you", event.transcript ?? "")]);
-        }
-        setLiveUserCaption("");
-        break;
-      case "response.output_audio_transcript.delta":
-        setLiveTutorCaption((previous) => previous + (event.delta ?? ""));
-        break;
-      case "response.output_audio_transcript.done":
-        if (event.transcript) {
-          setTranscript((previous) => [
-            ...previous,
-            buildTurn("tutor", event.transcript ?? "")
-          ]);
-        }
-        setLiveTutorCaption("");
-        break;
-      case "error":
-        setStatus("error");
-        setError(event.error?.message ?? "The realtime session reported an error.");
-        break;
-      default:
-        break;
+    const float32 = decodePcm16Base64(base64Pcm);
+    const buffer = audioContext.createBuffer(1, float32.length, 24000);
+    buffer.getChannelData(0).set(float32);
+
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+
+    const currentTime = audioContext.currentTime;
+    if (nextPlayTimeRef.current < currentTime) {
+      nextPlayTimeRef.current = currentTime;
     }
+
+    source.start(nextPlayTimeRef.current);
+    nextPlayTimeRef.current += buffer.duration;
   }, []);
+
+  const initializeMic = useCallback(
+    async (deviceId?: string) => {
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      await audioContext.resume();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          autoGainControl: true,
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      });
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      processor.onaudioprocess = (event) => {
+        const ws = socketRef.current;
+        if (!sessionActiveRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
+          return;
+        }
+
+        const input = event.inputBuffer.getChannelData(0);
+        const output = event.outputBuffer.getChannelData(0);
+        output.fill(0);
+
+        const pcm = new Int16Array(input.length);
+        for (let index = 0; index < input.length; index += 1) {
+          const sample = Math.max(-1, Math.min(1, input[index]));
+          pcm[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+
+        // Send audio using the raw WebSocket format from working Gemini Live reference
+        ws.send(
+          JSON.stringify({
+            realtimeInput: {
+              audio: {
+                mimeType: "audio/pcm;rate=16000",
+                data: arrayBufferToBase64(pcm.buffer)
+              }
+            }
+          })
+        );
+      };
+
+      source.connect(analyser);
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      audioContextRef.current = audioContext;
+      localStreamRef.current = stream;
+      processorRef.current = processor;
+      nextPlayTimeRef.current = audioContext.currentTime;
+
+      const activeTrack = stream.getAudioTracks()[0];
+      if (activeTrack?.label) {
+        appendEvent("client.mic.selected", `Using input: ${activeTrack.label}`);
+      }
+      startMicrophoneDiagnostics(analyser);
+      appendEvent("client.mic.ready", "Microphone stream connected to Gemini Live.");
+    },
+    [appendEvent, startMicrophoneDiagnostics]
+  );
+
+  const handleServerMessage = useCallback(
+    (message: GeminiServerMessage) => {
+      if (!sessionActiveRef.current) return;
+
+      if (message.serverContent?.interrupted && audioContextRef.current) {
+        appendEvent("server.interrupted", "Gemini interrupted the current response.");
+        nextPlayTimeRef.current = audioContextRef.current.currentTime;
+      }
+
+      const userTranscript = message.serverContent?.inputTranscription?.text?.trim();
+      if (userTranscript) {
+        currentUserCaptionRef.current = userTranscript;
+        setLiveUserCaption(userTranscript);
+        appendEvent("server.input_transcription", userTranscript);
+        updateStatus("listening");
+      }
+
+      const tutorTranscript =
+        message.serverContent?.outputTranscription?.text?.trim();
+      if (tutorTranscript) {
+        currentTutorCaptionRef.current = tutorTranscript;
+        setLiveTutorCaption(tutorTranscript);
+        appendEvent("server.output_transcription", tutorTranscript);
+        updateStatus("speaking");
+      }
+
+      for (const part of message.serverContent?.modelTurn?.parts ?? []) {
+        if (part.text?.trim()) {
+          currentTutorCaptionRef.current = part.text.trim();
+          setLiveTutorCaption(part.text.trim());
+          updateStatus("speaking");
+        }
+
+        if (part.inlineData?.data) {
+          playAudioChunk(part.inlineData.data);
+          updateStatus("speaking");
+        }
+      }
+
+      if (
+        message.serverContent?.turnComplete ||
+        message.serverContent?.generationComplete ||
+        message.serverContent?.waitingForInput
+      ) {
+        appendEvent("server.turn_complete", "Gemini completed a conversational turn.");
+        finalizeTurn();
+        if (currentStatusRef.current !== "error") {
+          updateStatus("ready");
+        }
+      }
+    },
+    [appendEvent, finalizeTurn, playAudioChunk, updateStatus]
+  );
 
   const startSession = useCallback(
     async (input: StartSessionInput) => {
@@ -327,156 +364,142 @@ export function useRealtimeTutorSession() {
       setEventLog([]);
       setLiveUserCaption("");
       setLiveTutorCaption("");
+      transcriptRef.current = [];
       setTranscript([]);
-      setStatus("connecting");
-      appendEvent("client.session.start", `Starting session for ${input.presetLabel}.`);
+      updateStatus("connecting");
+      appendEvent(
+        "client.session.start",
+        `Starting Gemini Live session for ${input.presetLabel}.`
+      );
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            autoGainControl: true,
-            deviceId: input.deviceId ? { exact: input.deviceId } : undefined,
-            echoCancellation: true,
-            noiseSuppression: true
-          }
-        });
-
-        const activeTrack = stream.getAudioTracks()[0];
-        if (activeTrack?.label) {
-          appendEvent("client.mic.selected", `Using input: ${activeTrack.label}`);
-        }
-
-        const peerConnection = new RTCPeerConnection();
-        const remoteAudio = new Audio();
-        remoteAudio.autoplay = true;
-
-        remoteAudioRef.current = remoteAudio;
-        localStreamRef.current = stream;
-        peerRef.current = peerConnection;
-        startedAtRef.current = new Date().toISOString();
-
-        stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
-        stream.getAudioTracks().forEach(wireTrackDebugging);
-        await startMicrophoneDiagnostics(stream);
-
-        peerConnection.addEventListener("connectionstatechange", () => {
-          appendEvent(
-            "client.peer.connection_state",
-            peerConnection.connectionState || "unknown"
-          );
-        });
-        peerConnection.addEventListener("iceconnectionstatechange", () => {
-          appendEvent(
-            "client.peer.ice_connection_state",
-            peerConnection.iceConnectionState || "unknown"
-          );
-        });
-        peerConnection.addEventListener("icegatheringstatechange", () => {
-          appendEvent(
-            "client.peer.ice_gathering_state",
-            peerConnection.iceGatheringState || "unknown"
-          );
-        });
-        peerConnection.addEventListener("signalingstatechange", () => {
-          appendEvent(
-            "client.peer.signaling_state",
-            peerConnection.signalingState || "unknown"
-          );
-        });
-        peerConnection.addEventListener("icecandidateerror", () => {
-          appendEvent(
-            "client.peer.ice_candidate_error",
-            "ICE candidate gathering reported an error."
-          );
-        });
-        startTransportDiagnostics(peerConnection);
-
-        peerConnection.ontrack = (event) => {
-          remoteAudio.srcObject = event.streams[0];
-          appendEvent("client.audio.track", "Remote tutor audio track attached.");
-        };
-        remoteAudio.addEventListener("play", () => {
-          appendEvent("client.audio.play", "Tutor audio playback started.");
-        });
-        remoteAudio.addEventListener("playing", () => {
-          appendEvent("client.audio.playing", "Tutor audio is playing.");
-        });
-        remoteAudio.addEventListener("pause", () => {
-          appendEvent("client.audio.pause", "Tutor audio playback paused.");
-        });
-        remoteAudio.addEventListener("ended", () => {
-          appendEvent("client.audio.ended", "Tutor audio playback ended.");
-        });
-        remoteAudio.addEventListener("error", () => {
-          appendEvent("client.audio.error", "Tutor audio element reported an error.");
-        });
-
-        const dataChannel = peerConnection.createDataChannel("oai-events");
-        dataChannelRef.current = dataChannel;
-        dataChannel.addEventListener("open", () => {
-          setStatus("ready");
-          appendEvent("client.channel.open", "Realtime data channel connected.");
-          dataChannel.send(
-            JSON.stringify({
-              type: "response.create",
-              response: {
-                output_modalities: ["audio"],
-                instructions: [
-                  `Focus this session on ${input.focus}.`,
-                  "Do not give a welcome speech or announce the lesson.",
-                  "Open naturally, briefly, and supportively.",
-                  "Assume the learner is an early beginner and lean toward English at the start.",
-                  "Use at most one tiny Italian phrase or one very easy Italian question in the first turn.",
-                  "Keep the first reply under two short sentences."
-                ].join(" ")
-              }
-            })
-          );
-        });
-        dataChannel.addEventListener("message", (messageEvent) => {
-          handleServerEvent(JSON.parse(messageEvent.data) as RealtimeServerEvent);
-        });
-        dataChannel.addEventListener("close", () => {
-          appendEvent("client.channel.closed", "Realtime data channel closed.");
-        });
-        dataChannel.addEventListener("error", () => {
-          appendEvent("client.channel.error", "Realtime data channel reported an error.");
-        });
-
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-
-        const answerSdp = await createRealtimeAnswer({
-          offerSdp: offer.sdp ?? "",
+        const liveSession = await createLiveSession({
           focus: input.focus,
           presetLabel: input.presetLabel
         });
 
-        await peerConnection.setRemoteDescription({
-          type: "answer",
-          sdp: answerSdp
-        });
+        const ws = new WebSocket(
+          `${GEMINI_WS_URL}?key=${liveSession.apiKey}`
+        );
+        socketRef.current = ws;
+
+        ws.onopen = () => {
+          appendEvent(
+            "client.live.open",
+            "WebSocket opened. Sending setup message..."
+          );
+
+          // Send setup message — matches the working Gemini Live HTML reference
+          const setupMsg = {
+            setup: {
+              model: liveSession.model,
+              systemInstruction: {
+                parts: [{ text: liveSession.systemInstruction }]
+              },
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: liveSession.voice
+                    }
+                  }
+                }
+              },
+              inputAudioTranscription: {},
+              outputAudioTranscription: {}
+            }
+          };
+
+          console.log("[Gemini Live] Setup message:", JSON.stringify(setupMsg, null, 2));
+          ws.send(JSON.stringify(setupMsg));
+        };
+
+        ws.onmessage = async (event) => {
+          let msg: GeminiServerMessage;
+          try {
+            if (event.data instanceof Blob) {
+              msg = JSON.parse(await event.data.text());
+            } else {
+              msg = JSON.parse(event.data);
+            }
+          } catch (err) {
+            console.error("Gemini parse error:", err);
+            return;
+          }
+
+          if (msg.setupComplete) {
+            appendEvent(
+              "client.live.setup_complete",
+              "Gemini accepted the live session setup."
+            );
+            sessionActiveRef.current = true;
+            startedAtRef.current = new Date().toISOString();
+
+            await initializeMic(input.deviceId);
+            updateStatus("ready");
+            appendEvent(
+              "client.session.ready",
+              "Mic active. Speak or wait for the tutor to begin."
+            );
+            return;
+          }
+
+          handleServerMessage(msg);
+        };
+
+        ws.onerror = () => {
+          appendEvent("client.live.error", "WebSocket error (see close event for details).");
+        };
+
+        ws.onclose = (event) => {
+          let reasonText = event.reason || "Connection dropped.";
+          if (event.code === 403)
+            reasonText = "403 Forbidden: Invalid API Key or region restriction.";
+          if (event.code === 400)
+            reasonText = "400 Bad Request: Setup format rejected.";
+          if (event.code === 1011)
+            reasonText = "1011 Internal Error: Google backend error.";
+          if (event.code === 1008)
+            reasonText = "1008 Policy: Model not found or not allowlisted.";
+
+          const detail = `Session closed: ${reasonText} (code ${event.code})`;
+          appendEvent("client.live.close", detail);
+          console.warn("[Gemini Live]", detail);
+
+          // Always clean up and surface the error, whether or not setup completed
+          sessionActiveRef.current = false;
+          stopAudioResources();
+
+          // If we were still connecting or active, treat this as an error
+          if (currentStatusRef.current !== "idle" && currentStatusRef.current !== "error") {
+            updateStatus("error");
+            setError(reasonText);
+          }
+        };
       } catch (sessionError) {
         cleanup();
-        setStatus("error");
+        updateStatus("error");
         setError(
           sessionError instanceof Error
             ? sessionError.message
-            : "We could not start the realtime lesson."
+            : "We could not start the Gemini Live lesson."
         );
         appendEvent(
           "client.session.error",
-          sessionError instanceof Error ? sessionError.message : "Unknown session error."
+          sessionError instanceof Error
+            ? sessionError.message
+            : "Unknown session error."
         );
       }
     },
     [
       appendEvent,
       cleanup,
-      handleServerEvent,
-      startMicrophoneDiagnostics,
-      startTransportDiagnostics,
-      wireTrackDebugging
+      handleServerMessage,
+      initializeMic,
+      stopAudioResources,
+      updateStatus
     ]
   );
 
@@ -484,22 +507,58 @@ export function useRealtimeTutorSession() {
     const startedAt = startedAtRef.current;
     const endedAt = new Date().toISOString();
 
+    sessionActiveRef.current = false;
+    finalizeTurn();
     cleanup();
-    setStatus("idle");
+    updateStatus("idle");
     setLiveUserCaption("");
     setLiveTutorCaption("");
     startedAtRef.current = null;
 
-    if (!startedAt) {
-      return null;
-    }
+    if (!startedAt) return null;
 
     return {
       startedAt,
       endedAt,
-      turns: transcript
+      turns: transcriptRef.current
     };
-  }, [cleanup, transcript]);
+  }, [cleanup, finalizeTurn, updateStatus]);
+
+  const promptReply = useCallback(() => {
+    const ws = socketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    ws.send(
+      JSON.stringify({
+        clientContent: {
+          turns: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: "Continue the tutoring conversation with one short, natural spoken reply."
+                }
+              ]
+            }
+          ],
+          turnComplete: true
+        }
+      })
+    );
+  }, []);
+
+  const commitSpeechTurn = useCallback(() => {
+    const ws = socketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    ws.send(
+      JSON.stringify({
+        realtimeInput: {
+          audioStreamEnd: true
+        }
+      })
+    );
+  }, []);
 
   return {
     commitSpeechTurn,

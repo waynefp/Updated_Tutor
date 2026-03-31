@@ -76,6 +76,7 @@ export function buildTutorInstructions(
     "- Never assume the learner can comfortably stay in Italian for long stretches yet.",
     "SPEAKING STYLE:",
     "- Keep spoken turns short, warm, and natural.",
+    "- When speaking English, keep a subtle Italian accent and rhythm. It should feel light and natural, never exaggerated or theatrical.",
     "- For a new or very early beginner, lean toward English support first and add Italian in small usable pieces.",
     "- Use Italian for short target phrases, tiny questions, repetition, and modeling.",
     "- Use English freely when it helps the learner feel safe, understand the task, or keep momentum.",

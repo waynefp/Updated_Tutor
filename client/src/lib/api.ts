@@ -1,5 +1,6 @@
 import type {
   BootstrapPayload,
+  LiveSessionPayload,
   ReflectionPayload,
   SessionCapture
 } from "../types";
@@ -20,13 +21,12 @@ export async function fetchBootstrap(): Promise<BootstrapPayload> {
   return response.json() as Promise<BootstrapPayload>;
 }
 
-export async function createRealtimeAnswer(input: {
-  offerSdp: string;
+export async function createLiveSession(input: {
   focus: string;
   presetLabel: string;
-}): Promise<string> {
+}): Promise<LiveSessionPayload> {
   const response = await assertOk(
-    await fetch(`${API_BASE_URL}/api/realtime/session`, {
+    await fetch(`${API_BASE_URL}/api/live/session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -35,7 +35,7 @@ export async function createRealtimeAnswer(input: {
     })
   );
 
-  return response.text();
+  return response.json() as Promise<LiveSessionPayload>;
 }
 
 export async function reflectLesson(input: {

@@ -61,6 +61,13 @@ export type BootstrapPayload = {
   cultureScenes: CultureScene[];
 };
 
+export type LiveSessionPayload = {
+  apiKey: string;
+  model: string;
+  systemInstruction: string;
+  voice: string;
+};
+
 export type LessonReflection = {
   title: string;
   summary: string;
