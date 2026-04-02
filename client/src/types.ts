@@ -61,6 +61,13 @@ export type BootstrapPayload = {
   cultureScenes: CultureScene[];
 };
 
+export type LiveSessionPayload = {
+  apiKey: string;
+  model: string;
+  systemInstruction: string;
+  voice: string;
+};
+
 export type LessonReflection = {
   title: string;
   summary: string;
@@ -97,3 +104,16 @@ export type SessionStatus =
   | "listening"
   | "speaking"
   | "error";
+
+export type RealtimeEventLogItem = {
+  id: string;
+  type: string;
+  detail: string;
+  timestamp: string;
+};
+
+export type AudioInputDevice = {
+  deviceId: string;
+  label: string;
+  isDefault: boolean;
+};

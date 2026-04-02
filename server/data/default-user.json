@@ -2,12 +2,12 @@
   "userId": "wayne",
   "learnerName": "Wayne",
   "createdAt": "2026-03-26T00:00:00.000Z",
-  "updatedAt": "2026-03-26T21:37:06.512Z",
+  "updatedAt": "2026-03-31T02:21:41.514Z",
   "profile": {
     "targetLanguage": "Italian",
     "nativeLanguage": "English",
     "levelEstimate": "A0-A1 emerging speaker",
-    "confidence": "Confidence is modest but improving with practice and repetition.",
+    "confidence": "Still building confidence with short replies; needs continued gentle support",
     "goals": [
       "Hold short everyday conversations in Italian",
       "Get comfortable responding without mentally translating every word",
@@ -26,118 +26,170 @@
       "Regional food"
     ],
     "correctionPriorities": [
-      "Focus on one pronunciation or phrase structure at a time.",
-      "Use positive reinforcement and brief recasts.",
-      "Limit grammar explanations to brief usable tips.",
+      "Focus on one high-impact correction each session",
+      "Use spoken recasts over explanations",
+      "Keep feedback brief and actionable",
+      "Avoid overemphasis on pronunciation at this stage",
       "Correct one high-impact issue at a time",
-      "Favor spoken recasts over grammar lectures",
-      "Keep explanations brief and usable"
+      "Favor spoken recasts over grammar lectures"
     ],
-    "nextSessionFocus": "Continue practicing introductions and basic personal info with emphasis on spontaneous responses and follow-up questions.",
+    "nextSessionFocus": "Simple self-introductions and easy follow-up questions to build sentence formation and fluency",
     "tutorNotes": [
-      "Keep session pace gentle and calm to reduce pressure.",
-      "Encourage verbal repetition for retention and confidence.",
-      "Praise attempts promptly to maintain motivation.",
-      "Start gentle, keep the pace calm, and reward attempts quickly.",
-      "Use mostly Italian with short English rescue lines only when needed."
+      "Keep session pacing gentle and supportive.",
+      "Encourage repetition aloud of key phrases to improve recall.",
+      "Use English when necessary for confidence but gradually reduce.",
+      "Focus on making full simple sentences instead of single words or mixed languages.",
+      "Reward brave attempts quickly to build learner motivation.",
+      "Continue gentle pacing and immediate positive feedback."
     ]
   },
   "recentVocabulary": [
     {
-      "italian": "Mi chiamo",
-      "english": "My name is",
-      "example": "Mi chiamo Wayne."
+      "italian": "Ciao",
+      "english": "Hello/Bye",
+      "example": "Ciao! Come stai?"
+    },
+    {
+      "italian": "Bene",
+      "english": "Good/Fine",
+      "example": "Sto bene, grazie."
+    },
+    {
+      "italian": "Come stai?",
+      "english": "How are you?",
+      "example": "Ciao! Come stai?"
+    },
+    {
+      "italian": "Mi chiamo...",
+      "english": "My name is...",
+      "example": "Mi chiamo Marco."
     },
     {
       "italian": "Di dove sei?",
       "english": "Where are you from?",
-      "example": "Di dove sei? Sono di Londra."
+      "example": "Di dove sei? Sono di Roma."
+    },
+    {
+      "italian": "Sono a casa",
+      "english": "I am at home",
+      "example": "Adesso sono a casa."
     },
     {
       "italian": "Come ti chiami?",
       "english": "What is your name?",
-      "example": "Come ti chiami? Mi chiamo Parola Viva."
-    },
-    {
-      "italian": "E tu?",
-      "english": "And you?",
-      "example": "Mi chiamo Wayne. E tu?"
+      "example": "Come ti chiami? Mi chiamo Marco."
     }
   ],
   "sessions": [
     {
-      "id": "2db9162f-9016-4b3a-bb51-403b603cdf03",
-      "title": "Introductions and Basic Personal Information Practice",
+      "id": "17997740-3316-4f76-9de0-9c77c580df88",
+      "title": "Reflection on First Italian Introduction Practice",
       "focus": "Practice introductions, names, where you are from, and one or two easy follow-up questions.",
       "presetLabel": "Soft landing",
-      "dateIso": "2026-03-26T21:36:56.897Z",
+      "dateIso": "2026-03-31T02:21:32.705Z",
       "durationMinutes": 1,
-      "summary": "In this session, Wayne practiced introducing himself in Italian, stating his name and origin, and forming simple follow-up questions. The tutor maintained a gentle pace and encouraged Wayne to speak in Italian with minimal English support. Repetition of core phrases was used to build confidence, and attempts were rewarded to promote positive learning experiences.",
+      "summary": "The session focused on practicing simple introductions and basic conversational phrases about well-being and location. The learner showed effort in attempting Italian responses but often switched to other languages or incomplete phrases. There were some successful uses of greetings and simple questions, but the learner struggled with forming coherent sentences and needed frequent prompts. Positive reinforcement was given to encourage attempts and ensure a low-pressure environment.",
       "strengths": [
-        "Wayne can say 'Mi chiamo Wayne' with growing confidence.",
-        "He responds well to simple, familiar questions about identity and origin.",
-        "Shows good effort and maintains engagement despite beginner-level challenges."
+        "Learner greeted and used basic phrases like 'bene' and 'e come stai?'.",
+        "Shows willingness to try speaking Italian aloud despite difficulty.",
+        "Responds when prompted and repeats some phrases.",
+        "Maintains a calm and positive attitude during the session."
       ],
       "needsWork": [
-        "Pronunciation needs gentle correction to improve clarity, especially for phrases like 'Mi chiamo'.",
-        "Needs more fluidity moving from prepared phrases to natural follow-up questions.",
-        "Vocabulary remains limited to very basic introductions; more varied questions should be practiced."
+        "Forming full simple sentences introducing oneself clearly.",
+        "Sticking to Italian during the exchanges to build confidence and fluency.",
+        "Answering follow-up questions about origin and current activity in Italian.",
+        "Using common question words and simple prepositions for locations."
       ],
       "nextDrills": [
-        "Say aloud and repeat three times: 'Mi chiamo [your name]. E tu, come ti chiami?'.",
-        "Practice responding to 'Di dove sei?' with 'Sono di [your city]. E tu?'.",
-        "Ask and answer: 'Come stai?' with short replies like 'Bene, grazie.' or 'Così così.'.",
-        "Form three easy follow-up questions about origin and name to ask a partner: 'Come ti chiami?', 'Di dove sei?', 'Hai fratelli?'.",
-        "Listen and repeat a short dialogue introducing oneself and asking a simple question about origin."
+        "Practice saying 'Mi chiamo ___' (My name is ___) aloud repeatedly.",
+        "Short drill: 'Di dove sei?' with responses like 'Sono di ___.'",
+        "Practice short dialogues of greeting and asking 'Come stai?' with simple answers.",
+        "Simple Q&A about current location using 'Dove sei?' and 'Sono a casa.'"
       ],
       "cultureMoments": [
-        "Discuss the importance of names and greetings in Italian culture, often accompanied by a handshake or kiss on the cheek.",
-        "Briefly introduce common Italian regions known for unique dialects in greetings, enhancing cultural awareness."
+        "Discuss the common Italian greeting 'Ciao' and when to use it.",
+        "Introduce how Italians ask 'Di dove sei?' as a way to start conversation.",
+        "Highlight the Italian concept of saying 'a casa' (at home) to express location.",
+        "Briefly mention typical Italian home cooking as a topic to connect with 'cucina' (kitchen)."
       ],
       "vocabulary": [
         {
-          "italian": "Mi chiamo",
-          "english": "My name is",
-          "example": "Mi chiamo Wayne."
+          "italian": "Ciao",
+          "english": "Hello/Bye",
+          "example": "Ciao! Come stai?"
+        },
+        {
+          "italian": "Bene",
+          "english": "Good/Fine",
+          "example": "Sto bene, grazie."
+        },
+        {
+          "italian": "Come stai?",
+          "english": "How are you?",
+          "example": "Ciao! Come stai?"
+        },
+        {
+          "italian": "Mi chiamo...",
+          "english": "My name is...",
+          "example": "Mi chiamo Marco."
         },
         {
           "italian": "Di dove sei?",
           "english": "Where are you from?",
-          "example": "Di dove sei? Sono di Londra."
+          "example": "Di dove sei? Sono di Roma."
         },
         {
-          "italian": "Come ti chiami?",
-          "english": "What is your name?",
-          "example": "Come ti chiami? Mi chiamo Parola Viva."
-        },
-        {
-          "italian": "E tu?",
-          "english": "And you?",
-          "example": "Mi chiamo Wayne. E tu?"
+          "italian": "Sono a casa",
+          "english": "I am at home",
+          "example": "Adesso sono a casa."
         }
       ]
     },
     {
-      "id": "72e89c70-c1ce-43dd-bc75-84b1da5dc5cc",
-      "title": "Short speaking checkpoint",
+      "id": "c2078756-22e3-4244-b693-7513a120c356",
+      "title": "First Italian Speaking Practice: Introductions and Basic Questions",
       "focus": "Practice introductions, names, where you are from, and one or two easy follow-up questions.",
       "presetLabel": "Soft landing",
-      "dateIso": "2026-03-26T20:28:44.837Z",
+      "dateIso": "2026-03-31T00:56:14.259Z",
       "durationMinutes": 1,
-      "summary": "A brief Italian speaking session was captured. The next lesson should revisit the same scene with one slightly longer answer.",
+      "summary": "In this session, we focused on practicing simple Italian introductions, including stating one's name and origin, along with easy follow-up questions. The learner showed initial hesitancy but managed to respond with short Italian phrases with some help and encouragement. The tutor maintained a calm pace and provided immediate positive feedback. Although the learner mixed in Spanish briefly, the session ended with attempts to use Italian question words.",
       "strengths": [
-        "Showed up and produced spoken Italian in context."
+        "Learner was willing to try speaking Italian despite initial hesitation.",
+        "Responded correctly to simple prompts like 'Bene.'",
+        "Showed readiness to practice follow-up questions with tutor prompting."
       ],
       "needsWork": [
-        "Build slightly longer answers with less hesitation."
+        "Learner's confidence to speak without resorting to other languages or silence.",
+        "Pronunciation clarity to improve understanding, though not a major focus yet.",
+        "Building familiarity with Italian question words to smoothly ask and answer."
       ],
       "nextDrills": [
-        "Repeat the practice introductions, names, where you are from, and one or two easy follow-up questions. scene with two-sentence answers."
+        "Practice saying 'My name is...' and asking 'What is your name?' aloud with short role-play.",
+        "Use short question and answer drills: 'Where are you from?' / 'I am from...'.",
+        "Repeat simple greetings and responses aloud to build confidence."
       ],
       "cultureMoments": [
-        "Keep the next lesson anchored in a real, modern Italian daily-life setting."
+        "Discuss simple greetings typical in Italian culture, like the use of 'Bene' or 'Ciao.'",
+        "Introduce a brief note on Italian naming customs and region origins as common conversation starters."
       ],
-      "vocabulary": []
+      "vocabulary": [
+        {
+          "italian": "Come ti chiami?",
+          "english": "What is your name?",
+          "example": "Come ti chiami? Mi chiamo Marco."
+        },
+        {
+          "italian": "Di dove sei?",
+          "english": "Where are you from?",
+          "example": "Di dove sei? Sono di Roma."
+        },
+        {
+          "italian": "Bene",
+          "english": "Good/Well",
+          "example": "Come stai? Bene, grazie."
+        }
+      ]
     }
   ]
 }
