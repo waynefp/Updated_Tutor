@@ -33,10 +33,36 @@ const reflectionSchema = {
           properties: {
             italian: { type: "string" },
             english: { type: "string" },
-            example: { type: "string" }
+            example: { type: "string" },
+            strength: { type: "integer", minimum: 1, maximum: 5 }
           },
-          required: ["italian", "english", "example"]
+          required: ["italian", "english", "example", "strength"]
         }
+      },
+      curriculum: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          mastered: { type: "array", items: { type: "string" } },
+          workingOn: { type: "array", items: { type: "string" } },
+          strugglingWith: { type: "array", items: { type: "string" } }
+        },
+        required: ["mastered", "workingOn", "strugglingWith"]
+      },
+      journeyUpdate: { type: "string" },
+      nextSessionPlan: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          openerNote: { type: "string" },
+          warmupVocabulary: {
+            type: "array",
+            items: { type: "string" }
+          },
+          reinforce: { type: "string" },
+          introduce: { type: "string" }
+        },
+        required: ["openerNote", "warmupVocabulary", "reinforce", "introduce"]
       },
       updatedProfile: {
         type: "object",
@@ -76,6 +102,9 @@ const reflectionSchema = {
       "nextDrills",
       "cultureMoments",
       "vocabulary",
+      "curriculum",
+      "journeyUpdate",
+      "nextSessionPlan",
       "updatedProfile"
     ]
   },
@@ -84,7 +113,7 @@ const reflectionSchema = {
 
 function buildTranscriptSnippet(turns: LessonTurn[]) {
   return turns
-    .slice(-16)
+    .slice(-40)
     .map((turn) => `${turn.speaker === "you" ? "Learner" : "Tutor"}: ${turn.text}`)
     .join("\n");
 }
@@ -99,6 +128,14 @@ function fallbackReflection(memory: TutorMemory, focus: string): LessonReflectio
     nextDrills: [`Repeat the ${focus.toLowerCase()} scene with two-sentence answers.`],
     cultureMoments: ["Keep the next lesson anchored in a real, modern Italian daily-life setting."],
     vocabulary: [],
+    curriculum: memory.profile.curriculum,
+    journeyUpdate: "",
+    nextSessionPlan: memory.profile.nextSessionPlan ?? {
+      openerNote: "Pick up warmly and revisit the last scene with slightly longer answers.",
+      warmupVocabulary: memory.recentVocabulary.slice(0, 3).map((item) => item.italian),
+      reinforce: focus,
+      introduce: "One new easy follow-up question in the same scene."
+    },
     updatedProfile: {
       levelEstimate: memory.profile.levelEstimate,
       confidence: "Confidence grows with repeat live speaking turns.",
@@ -122,9 +159,17 @@ export async function reflectLessonWithAI(input: {
   }
 
   try {
+    const knownVocabulary = input.memory.recentVocabulary.map((item) => ({
+      italian: item.italian,
+      english: item.english,
+      strength: item.strength ?? 2,
+      lastPracticedAt: item.lastPracticedAt
+    }));
+    const lastSession = input.memory.sessions[0];
+
     const response = await input.client.responses.create({
       model: process.env.OPENAI_SUMMARY_MODEL ?? "gpt-4.1-mini",
-      max_output_tokens: 900,
+      max_output_tokens: 1400,
       text: {
         format: {
           type: "json_schema",
@@ -138,10 +183,13 @@ export async function reflectLessonWithAI(input: {
             {
               type: "input_text",
               text: [
-                "You summarize Italian speaking lessons and update tutor memory.",
-                "Keep the reflection practical, specific, and tuned for the next live speaking session.",
+                "You are the memory of an ongoing one-on-one Italian tutoring relationship. After each live speaking session you update the tutor's long-term record so the NEXT session continues seamlessly — never starts from scratch.",
+                "Keep everything practical, specific, and tuned for the next live spoken session.",
                 "Do not overstate progress. Reward effort but stay concrete.",
-                "Assume one learner only.",
+                "VOCABULARY: report every Italian word or phrase the learner actually practiced this session (including known ones that came up again), each with a strength rating: 1 = brand new or shaky, 3 = usable with prompting, 5 = automatic. When a known word reappears, re-rate it honestly based on this session's evidence.",
+                "CURRICULUM: maintain the three lists (mastered / workingOn / strugglingWith) as the single source of truth for where the learner stands. Carry forward existing items, move items between lists only on real evidence from this transcript, and keep each item short (a skill or pattern, not a paragraph).",
+                "JOURNEY UPDATE: write 1-3 sentences continuing the learner's story — what happened this session and how it fits the longer arc. It will be appended to a running narrative.",
+                "NEXT SESSION PLAN: plan the opening of the next session the way a human tutor would. openerNote: one concrete sentence telling the tutor how to open, referencing something specific from THIS session (a phrase used, a moment, a struggle). warmupVocabulary: 3-4 Italian items to recycle in the first minute, chosen from the weakest or most recently learned. reinforce: the one thing to consolidate. introduce: the one small new thing to add.",
                 "Prefer next-step drills that can be spoken aloud in under three minutes each."
               ].join("\n")
             }
@@ -156,6 +204,10 @@ export async function reflectLessonWithAI(input: {
                 `Session preset: ${input.presetLabel}`,
                 `Session focus: ${input.focus}`,
                 `Current learner profile: ${JSON.stringify(input.memory.profile)}`,
+                `Known vocabulary with current strengths: ${JSON.stringify(knownVocabulary)}`,
+                lastSession
+                  ? `Previous session (${lastSession.dateIso.slice(0, 10)}): ${lastSession.summary}`
+                  : "This was the learner's first recorded session.",
                 "Transcript excerpt:",
                 buildTranscriptSnippet(input.turns)
               ].join("\n\n")

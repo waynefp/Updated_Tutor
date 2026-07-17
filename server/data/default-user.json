@@ -41,7 +41,20 @@
       "Focus on making full simple sentences instead of single words or mixed languages.",
       "Reward brave attempts quickly to build learner motivation.",
       "Continue gentle pacing and immediate positive feedback."
-    ]
+    ],
+    "curriculum": {
+      "mastered": [],
+      "workingOn": [
+        "Forming full simple sentences instead of single words",
+        "Staying in Italian without switching to other languages",
+        "Basic introduction Q&A: name, origin, current location"
+      ],
+      "strugglingWith": []
+    },
+    "journey": [
+      "2026-03-31: First two sessions covered greetings and introductions. Willing to speak aloud but hesitant; sometimes mixes in Spanish. Responds well to gentle pacing and quick positive feedback."
+    ],
+    "nextSessionPlan": null
   },
   "recentVocabulary": [
     {
