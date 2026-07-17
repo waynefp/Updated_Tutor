@@ -64,6 +64,77 @@ app.post("/api/live/session", async (request, response) => {
   });
 });
 
+app.post("/api/live/openai-session", async (request, response) => {
+  if (!process.env.OPENAI_API_KEY) {
+    response.status(500).send("OPENAI_API_KEY is missing.");
+    return;
+  }
+
+  const { focus, presetLabel } = request.body as {
+    focus?: string;
+    presetLabel?: string;
+  };
+
+  if (!focus || !presetLabel) {
+    response.status(400).send("focus and presetLabel are required.");
+    return;
+  }
+
+  const memory = await loadMemory();
+  const model = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1";
+  const voice = process.env.OPENAI_REALTIME_VOICE ?? "marin";
+
+  const secretResponse = await fetch(
+    "https://api.openai.com/v1/realtime/client_secrets",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        session: {
+          type: "realtime",
+          model,
+          instructions: buildTutorInstructions(memory, { focus, presetLabel }),
+          audio: {
+            input: {
+              transcription: { model: "gpt-4o-mini-transcribe" },
+              turn_detection: { type: "semantic_vad" }
+            },
+            output: { voice }
+          }
+        }
+      })
+    }
+  );
+
+  if (!secretResponse.ok) {
+    const detail = await secretResponse.text();
+    response
+      .status(502)
+      .send(`OpenAI could not create a realtime session: ${detail}`);
+    return;
+  }
+
+  const secret = (await secretResponse.json()) as {
+    value?: string;
+    expires_at?: number;
+  };
+
+  if (!secret.value) {
+    response.status(502).send("OpenAI returned no client secret.");
+    return;
+  }
+
+  response.json({
+    clientSecret: secret.value,
+    model,
+    voice,
+    expiresAt: secret.expires_at
+  });
+});
+
 app.post("/api/lessons/reflect", async (request, response) => {
   if (!process.env.OPENAI_API_KEY) {
     response.status(500).send("OPENAI_API_KEY is missing.");
