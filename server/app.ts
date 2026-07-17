@@ -21,6 +21,19 @@ const openai = new OpenAI({
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
 
+app.get("/api/health", (_request, response) => {
+  const blobEnvKeys = Object.keys(process.env).filter((key) => key.startsWith("BLOB_"));
+  response.json({
+    ok: true,
+    storage: process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "ephemeral",
+    blobEnvKeys,
+    models: {
+      gemini: process.env.GEMINI_LIVE_MODEL ?? "gemini-3.1-flash-live-preview",
+      openai: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1"
+    }
+  });
+});
+
 app.get("/api/bootstrap", async (_request, response) => {
   const memory = await loadMemory();
   const assets = getBootstrapAssets();
