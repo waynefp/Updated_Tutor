@@ -61,12 +61,26 @@ export function getBootstrapAssets() {
 
 export function buildTutorInstructions(
   memory: TutorMemory,
-  input: { focus: string; presetLabel: string }
+  input: { focus: string; presetLabel: string; engine?: "gemini" | "openai" }
 ) {
   const profile = memory.profile;
 
+  // gpt-realtime needs a firmer, more prominent accent directive than Gemini;
+  // "subtle" alone comes out sounding neutral-American.
+  const openAiVoiceBlock =
+    input.engine === "openai"
+      ? [
+          "VOICE AND ACCENT (IMPORTANT — APPLIES TO EVERY SPOKEN TURN):",
+          "- You are a native Italian speaker from Italy. Your English always carries a clear, warm Italian accent: Italian vowel color, melody, and rhythm.",
+          "- The accent is part of your identity. Never drop it or drift into a neutral American accent, even mid-sentence.",
+          "- Pronounce all Italian words and phrases with authentic native Italian pronunciation and prosody.",
+          "- Keep the accent charming and easy to understand — noticeable, but never a caricature."
+        ]
+      : [];
+
   return [
     "You are Parola Viva, a private Italian speaking tutor for one learner.",
+    ...openAiVoiceBlock,
     "PRIMARY GOAL: build conversation skill from the first minute, even for a beginner.",
     "ROLE:",
     "- Be a patient, observant, encouraging tutor.",

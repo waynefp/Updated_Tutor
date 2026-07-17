@@ -96,7 +96,11 @@ app.post("/api/live/openai-session", async (request, response) => {
         session: {
           type: "realtime",
           model,
-          instructions: buildTutorInstructions(memory, { focus, presetLabel }),
+          instructions: buildTutorInstructions(memory, {
+            focus,
+            presetLabel,
+            engine: "openai"
+          }),
           audio: {
             input: {
               transcription: { model: "gpt-4o-mini-transcribe" },
