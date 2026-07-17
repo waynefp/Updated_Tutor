@@ -3,7 +3,12 @@ import dotenv from "dotenv";
 import express from "express";
 import OpenAI from "openai";
 import path from "node:path";
-import { applyReflection, loadMemory, toClientProfile } from "./lib/memoryStore.js";
+import {
+  applyReflection,
+  getStorageStatus,
+  loadMemory,
+  toClientProfile
+} from "./lib/memoryStore.js";
 import { buildTutorInstructions, getBootstrapAssets } from "./lib/prompts.js";
 import { reflectLessonWithAI } from "./lib/reflection.js";
 import type { LessonTurn } from "./lib/types.js";
@@ -21,12 +26,10 @@ const openai = new OpenAI({
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
 
-app.get("/api/health", (_request, response) => {
-  const blobEnvKeys = Object.keys(process.env).filter((key) => key.startsWith("BLOB_"));
+app.get("/api/health", async (_request, response) => {
   response.json({
     ok: true,
-    storage: process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "ephemeral",
-    blobEnvKeys,
+    storage: await getStorageStatus(),
     models: {
       gemini: process.env.GEMINI_LIVE_MODEL ?? "gemini-3.1-flash-live-preview",
       openai: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1"

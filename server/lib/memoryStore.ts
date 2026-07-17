@@ -17,8 +17,31 @@ const MAX_JOURNEY_ENTRIES = 24;
 // the most recently written memory always wins over a cached read.
 let memoryCache: TutorMemory | null = null;
 
+// Two auth modes: classic static BLOB_READ_WRITE_TOKEN (works anywhere), or
+// OIDC (default for stores connected since mid-2026) where the SDK pairs
+// BLOB_STORE_ID with the auto-rotating VERCEL_OIDC_TOKEN — Vercel runtime only.
 function useBlob() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return Boolean(
+    process.env.BLOB_READ_WRITE_TOKEN ||
+      (process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN)
+  );
+}
+
+export async function getStorageStatus() {
+  if (!useBlob()) {
+    return { mode: "ephemeral" as const };
+  }
+  try {
+    const info = await head(BLOB_PATHNAME);
+    return {
+      mode: "blob" as const,
+      seeded: true,
+      sizeBytes: info.size,
+      lastWrittenAt: info.uploadedAt
+    };
+  } catch {
+    return { mode: "blob" as const, seeded: false };
+  }
 }
 
 const fallbackSeed: TutorMemory = {
