@@ -18,12 +18,14 @@ const MAX_JOURNEY_ENTRIES = 24;
 let memoryCache: TutorMemory | null = null;
 
 // Two auth modes: classic static BLOB_READ_WRITE_TOKEN (works anywhere), or
-// OIDC (default for stores connected since mid-2026) where the SDK pairs
-// BLOB_STORE_ID with the auto-rotating VERCEL_OIDC_TOKEN — Vercel runtime only.
+// OIDC (default for stores connected since mid-2026). Deployed functions get
+// the OIDC token via request context — not an env var — so the presence of
+// BLOB_STORE_ID on Vercel is the signal that the SDK can authenticate.
 function useBlob() {
   return Boolean(
     process.env.BLOB_READ_WRITE_TOKEN ||
-      (process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN)
+      (process.env.BLOB_STORE_ID &&
+        (process.env.VERCEL || process.env.VERCEL_OIDC_TOKEN))
   );
 }
 
@@ -39,8 +41,14 @@ export async function getStorageStatus() {
       sizeBytes: info.size,
       lastWrittenAt: info.uploadedAt
     };
-  } catch {
-    return { mode: "blob" as const, seeded: false };
+  } catch (error) {
+    if (error instanceof Error && error.name === "BlobNotFoundError") {
+      return { mode: "blob" as const, seeded: false };
+    }
+    return {
+      mode: "blob-error" as const,
+      detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    };
   }
 }
 
@@ -168,11 +176,17 @@ export async function saveMemory(memory: TutorMemory) {
   memory.updatedAt = new Date().toISOString();
   if (useBlob()) {
     memoryCache = memory;
-    await saveToBlob(memory);
-  } else {
-    await fs.mkdir(path.dirname(localMemoryPath), { recursive: true });
-    await fs.writeFile(localMemoryPath, JSON.stringify(memory, null, 2), "utf8");
+    try {
+      await saveToBlob(memory);
+      return memory;
+    } catch (error) {
+      // Degrade to the local/tmp file rather than failing the request; the
+      // in-memory cache keeps this instance consistent either way.
+      console.error("[memoryStore] Blob write failed, falling back to file:", error);
+    }
   }
+  await fs.mkdir(path.dirname(localMemoryPath), { recursive: true });
+  await fs.writeFile(localMemoryPath, JSON.stringify(memory, null, 2), "utf8");
   return memory;
 }
 
