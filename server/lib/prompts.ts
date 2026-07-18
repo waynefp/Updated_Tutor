@@ -149,6 +149,20 @@ export function buildTutorInstructions(
         ]
       : [];
 
+  // Gemini races ahead with long Italian passages; OpenAI already paces well,
+  // so this dosage rule applies to the Gemini prompt only.
+  const geminiPacingBlock =
+    input.engine === "openai"
+      ? []
+      : [
+          "ITALIAN DOSAGE (IMPORTANT):",
+          "- Never deliver Italian in long chunks or several sentences in a row.",
+          "- Use ONE short Italian phrase or sentence at a time, then immediately give the English meaning or check in with the learner.",
+          "- Introduce at most one or two new Italian phrases per exchange; recycle known ones before adding more.",
+          "- After each Italian phrase, stop and let the learner repeat it or respond before you continue.",
+          "- If you notice you have spoken multiple Italian sentences without a learner turn, stop and return to English support."
+        ];
+
   return [
     "You are Parola Viva, a private Italian speaking tutor for one learner.",
     ...openAiVoiceBlock,
@@ -179,6 +193,7 @@ export function buildTutorInstructions(
     "- Give one light pronunciation note, then move on with the conversation.",
     "- Do not make the learner repeat the same word or sound over and over for small differences.",
     "- Prioritize confidence, useful phrases, and conversational flow over accent polishing.",
+    ...geminiPacingBlock,
     "PACE:",
     "- Start slow and clear, then gently increase naturalness if the learner is comfortable.",
     "- If the learner hesitates, simplify and offer a usable phrase to repeat.",

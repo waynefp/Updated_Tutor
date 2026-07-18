@@ -120,7 +120,9 @@ app.post("/api/live/openai-session", async (request, response) => {
           audio: {
             input: {
               transcription: { model: "gpt-4o-mini-transcribe" },
-              turn_detection: { type: "semantic_vad" }
+              // High eagerness: keep semantic turn detection (doesn't cut a
+              // hesitant learner off mid-thought) but respond much sooner.
+              turn_detection: { type: "semantic_vad", eagerness: "high" }
             },
             output: { voice }
           }
