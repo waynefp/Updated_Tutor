@@ -42,13 +42,14 @@ export async function getStorageStatus() {
       lastWrittenAt: info.uploadedAt
     };
   } catch (error) {
-    if (error instanceof Error && error.name === "BlobNotFoundError") {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      (error instanceof Error && error.name === "BlobNotFoundError") ||
+      message.includes("does not exist")
+    ) {
       return { mode: "blob" as const, seeded: false };
     }
-    return {
-      mode: "blob-error" as const,
-      detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-    };
+    return { mode: "blob-error" as const, detail: message };
   }
 }
 
