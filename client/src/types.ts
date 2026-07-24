@@ -68,6 +68,15 @@ export type LiveSessionPayload = {
   voice: string;
 };
 
+export type OpenAiLiveSessionPayload = {
+  clientSecret: string;
+  model: string;
+  voice: string;
+  expiresAt?: number;
+};
+
+export type VoiceEngine = "gemini" | "openai";
+
 export type LessonReflection = {
   title: string;
   summary: string;

@@ -7,13 +7,15 @@ import {
 } from "react";
 import { fetchBootstrap, reflectLesson } from "./lib/api";
 import { useRealtimeTutorSession } from "./hooks/useRealtimeTutorSession";
+import { useOpenAiRealtimeSession } from "./hooks/useOpenAiRealtimeSession";
 import type {
   AudioInputDevice,
   BootstrapPayload,
   CultureScene,
   LessonReflection,
   SessionPreset,
-  TutorProfile
+  TutorProfile,
+  VoiceEngine
 } from "./types";
 
 const statusCopy: Record<string, string> = {
@@ -33,6 +35,7 @@ function formatRelativeDate(dateIso: string) {
 }
 
 const audioDeviceStorageKey = "parola-viva.audio-input";
+const voiceEngineStorageKey = "parola-viva.voice-engine";
 
 function toAudioInputDevices(devices: MediaDeviceInfo[]): AudioInputDevice[] {
   return devices
@@ -53,6 +56,15 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [audioInputs, setAudioInputs] = useState<AudioInputDevice[]>([]);
   const [selectedAudioInputId, setSelectedAudioInputId] = useState("");
+  const [voiceEngine, setVoiceEngine] = useState<VoiceEngine>(() =>
+    window.localStorage.getItem(voiceEngineStorageKey) === "openai"
+      ? "openai"
+      : "gemini"
+  );
+
+  const geminiSession = useRealtimeTutorSession();
+  const openAiSession = useOpenAiRealtimeSession();
+  const activeSession = voiceEngine === "openai" ? openAiSession : geminiSession;
 
   const {
     endSession,
@@ -64,7 +76,7 @@ export default function App() {
     startSession,
     status,
     transcript
-  } = useRealtimeTutorSession();
+  } = activeSession;
 
   const deferredTranscript = useDeferredValue(transcript);
   const isSessionLive =
@@ -120,6 +132,10 @@ export default function App() {
     }
     window.localStorage.setItem(audioDeviceStorageKey, selectedAudioInputId);
   }, [selectedAudioInputId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(voiceEngineStorageKey, voiceEngine);
+  }, [voiceEngine]);
 
   const heroScenes = useMemo<CultureScene[]>(
     () => bootstrap?.cultureScenes ?? [],
@@ -204,7 +220,9 @@ export default function App() {
           <div className="hero-meta">
             <div>
               <small>Realtime voice</small>
-              <strong>{bootstrap?.app.voice ?? "marin"}</strong>
+              <strong>
+                {voiceEngine === "openai" ? "marin" : bootstrap?.app.voice ?? "marin"}
+              </strong>
             </div>
             <div>
               <small>Current focus</small>
@@ -271,6 +289,28 @@ export default function App() {
             >
               End and save lesson
             </button>
+          </div>
+
+          <div className="engine-toggle-panel">
+            <span className="audio-input-label">Voice engine</span>
+            <div className="engine-toggle" role="group" aria-label="Voice engine">
+              <button
+                type="button"
+                className={voiceEngine === "gemini" ? "engine-option active" : "engine-option"}
+                disabled={status === "connecting" || isSessionLive}
+                onClick={() => setVoiceEngine("gemini")}
+              >
+                Gemini
+              </button>
+              <button
+                type="button"
+                className={voiceEngine === "openai" ? "engine-option active" : "engine-option"}
+                disabled={status === "connecting" || isSessionLive}
+                onClick={() => setVoiceEngine("openai")}
+              >
+                OpenAI
+              </button>
+            </div>
           </div>
 
           <div className="audio-input-panel">

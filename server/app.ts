@@ -3,7 +3,12 @@ import dotenv from "dotenv";
 import express from "express";
 import OpenAI from "openai";
 import path from "node:path";
-import { applyReflection, loadMemory, toClientProfile } from "./lib/memoryStore.js";
+import {
+  applyReflection,
+  getStorageStatus,
+  loadMemory,
+  toClientProfile
+} from "./lib/memoryStore.js";
 import { buildTutorInstructions, getBootstrapAssets } from "./lib/prompts.js";
 import { reflectLessonWithAI } from "./lib/reflection.js";
 import type { LessonTurn } from "./lib/types.js";
@@ -20,6 +25,17 @@ const openai = new OpenAI({
 
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
+
+app.get("/api/health", async (_request, response) => {
+  response.json({
+    ok: true,
+    storage: await getStorageStatus(),
+    models: {
+      gemini: process.env.GEMINI_LIVE_MODEL ?? "gemini-3.1-flash-live-preview",
+      openai: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1"
+    }
+  });
+});
 
 app.get("/api/bootstrap", async (_request, response) => {
   const memory = await loadMemory();
@@ -61,6 +77,83 @@ app.post("/api/live/session", async (request, response) => {
     model: `models/${model}`,
     systemInstruction: buildTutorInstructions(memory, { focus, presetLabel }),
     voice
+  });
+});
+
+app.post("/api/live/openai-session", async (request, response) => {
+  if (!process.env.OPENAI_API_KEY) {
+    response.status(500).send("OPENAI_API_KEY is missing.");
+    return;
+  }
+
+  const { focus, presetLabel } = request.body as {
+    focus?: string;
+    presetLabel?: string;
+  };
+
+  if (!focus || !presetLabel) {
+    response.status(400).send("focus and presetLabel are required.");
+    return;
+  }
+
+  const memory = await loadMemory();
+  const model = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1";
+  const voice = process.env.OPENAI_REALTIME_VOICE ?? "marin";
+
+  const secretResponse = await fetch(
+    "https://api.openai.com/v1/realtime/client_secrets",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        session: {
+          type: "realtime",
+          model,
+          instructions: buildTutorInstructions(memory, {
+            focus,
+            presetLabel,
+            engine: "openai"
+          }),
+          audio: {
+            input: {
+              transcription: { model: "gpt-4o-mini-transcribe" },
+              // High eagerness: keep semantic turn detection (doesn't cut a
+              // hesitant learner off mid-thought) but respond much sooner.
+              turn_detection: { type: "semantic_vad", eagerness: "high" }
+            },
+            output: { voice }
+          }
+        }
+      })
+    }
+  );
+
+  if (!secretResponse.ok) {
+    const detail = await secretResponse.text();
+    response
+      .status(502)
+      .send(`OpenAI could not create a realtime session: ${detail}`);
+    return;
+  }
+
+  const secret = (await secretResponse.json()) as {
+    value?: string;
+    expires_at?: number;
+  };
+
+  if (!secret.value) {
+    response.status(502).send("OpenAI returned no client secret.");
+    return;
+  }
+
+  response.json({
+    clientSecret: secret.value,
+    model,
+    voice,
+    expiresAt: secret.expires_at
   });
 });
 

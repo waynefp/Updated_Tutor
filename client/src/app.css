@@ -391,6 +391,47 @@ img {
   gap: 8px;
 }
 
+.engine-toggle-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.engine-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.engine-option {
+  min-height: 48px;
+  border-radius: 18px;
+  border: 1px solid rgba(20, 32, 34, 0.12);
+  background: rgba(255, 251, 244, 0.88);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.engine-option:hover:not(:disabled),
+.engine-option:focus-visible {
+  border-color: rgba(45, 112, 119, 0.35);
+}
+
+.engine-option.active {
+  background: rgba(20, 32, 34, 0.94);
+  border-color: rgba(20, 32, 34, 0.94);
+  color: white;
+}
+
+.engine-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .audio-input-label {
   font-size: 0.74rem;
   text-transform: uppercase;

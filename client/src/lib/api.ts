@@ -1,6 +1,7 @@
 import type {
   BootstrapPayload,
   LiveSessionPayload,
+  OpenAiLiveSessionPayload,
   ReflectionPayload,
   SessionCapture
 } from "../types";
@@ -36,6 +37,23 @@ export async function createLiveSession(input: {
   );
 
   return response.json() as Promise<LiveSessionPayload>;
+}
+
+export async function createOpenAiLiveSession(input: {
+  focus: string;
+  presetLabel: string;
+}): Promise<OpenAiLiveSessionPayload> {
+  const response = await assertOk(
+    await fetch(`${API_BASE_URL}/api/live/openai-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    })
+  );
+
+  return response.json() as Promise<OpenAiLiveSessionPayload>;
 }
 
 export async function reflectLesson(input: {
