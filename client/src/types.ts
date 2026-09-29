@@ -55,6 +55,8 @@ export type BootstrapPayload = {
   app: {
     name: string;
     voice: string;
+    geminiModels: Array<{ id: string; label: string }>;
+    geminiDefaultModel: string;
   };
   profile: TutorProfile;
   sessionPresets: SessionPreset[];

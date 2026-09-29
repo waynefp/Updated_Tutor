@@ -37,7 +37,7 @@ The app pairs a React front end with a lightweight Express server that:
 - The browser connects directly to Gemini Live over WebSockets.
 - The server issues a short-lived ephemeral token through `/api/live/session`, so the Gemini API key stays server-side.
 - Tutor instructions are assembled from saved learner memory before the session starts.
-- The default live model in this branch is `gemini-3.1-flash-live-preview`.
+- The default live model is `gemini-3.8-live` (3.1 Flash Live stays selectable in the app as a legacy option).
 - Google’s current Live API docs note that affective dialog and proactive audio are not supported in Gemini 3.1 Flash Live, so this branch does not enable those settings.
 
 ## Memory notes

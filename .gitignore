@@ -5,3 +5,4 @@ server/dist
 coverage
 
 .vercel
+scripts/.smoke-output/

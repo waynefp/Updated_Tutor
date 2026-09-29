@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createOpenAiLiveSession } from "../lib/api";
+import { createReplyTimer } from "../lib/replyTimer";
 import type {
   LessonTurn,
   RealtimeEventLogItem,
@@ -49,6 +50,8 @@ export function useOpenAiRealtimeSession() {
   const currentUserCaptionRef = useRef("");
   const currentTutorCaptionRef = useRef("");
 
+  const replyTimerRef = useRef(createReplyTimer());
+  const [replyTimesMs, setReplyTimesMs] = useState<number[]>([]);
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [eventLog, setEventLog] = useState<RealtimeEventLogItem[]>([]);
@@ -187,6 +190,7 @@ export function useOpenAiRealtimeSession() {
         const isSpeaking = level > 0.09;
         if (isSpeaking && !speechDetectedRef.current) {
           speechDetectedRef.current = true;
+          replyTimerRef.current.speechStarted();
           if (currentStatusRef.current === "ready") {
             updateStatus("listening");
           }
@@ -196,6 +200,7 @@ export function useOpenAiRealtimeSession() {
           );
         } else if (!isSpeaking && speechDetectedRef.current) {
           speechDetectedRef.current = false;
+          replyTimerRef.current.speechStopped();
           if (currentStatusRef.current === "listening") {
             updateStatus("ready");
           }
@@ -270,11 +275,20 @@ export function useOpenAiRealtimeSession() {
           }
           break;
 
-        case "output_audio_buffer.started":
+        case "output_audio_buffer.started": {
+          const replyMs = replyTimerRef.current.replyAudioStarted();
+          if (replyMs !== null) {
+            setReplyTimesMs((previous) => [...previous, replyMs]);
+            appendEvent(
+              "client.reply_time",
+              `Tutor audio started ${replyMs} ms after you stopped speaking.`
+            );
+          }
           if (currentStatusRef.current !== "error") {
             updateStatus("speaking");
           }
           break;
+        }
 
         case "output_audio_buffer.stopped":
         case "output_audio_buffer.cleared":
@@ -316,6 +330,8 @@ export function useOpenAiRealtimeSession() {
       setLiveTutorCaption("");
       transcriptRef.current = [];
       setTranscript([]);
+      setReplyTimesMs([]);
+      replyTimerRef.current.reset();
       updateStatus("connecting");
       appendEvent(
         "client.session.start",
@@ -516,6 +532,7 @@ export function useOpenAiRealtimeSession() {
     liveUserCaption,
     micLevel,
     promptReply,
+    replyTimesMs,
     startSession,
     status,
     transcript

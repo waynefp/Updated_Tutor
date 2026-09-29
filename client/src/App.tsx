@@ -8,6 +8,7 @@ import {
 import { fetchBootstrap, reflectLesson } from "./lib/api";
 import { useRealtimeTutorSession } from "./hooks/useRealtimeTutorSession";
 import { useOpenAiRealtimeSession } from "./hooks/useOpenAiRealtimeSession";
+import { medianMs } from "./lib/replyTimer";
 import type {
   AudioInputDevice,
   BootstrapPayload,
@@ -36,6 +37,11 @@ function formatRelativeDate(dateIso: string) {
 
 const audioDeviceStorageKey = "parola-viva.audio-input";
 const voiceEngineStorageKey = "parola-viva.voice-engine";
+const geminiModelStorageKey = "parola-viva.gemini-model";
+
+function formatSeconds(ms: number | null) {
+  return ms === null ? "–" : `${(ms / 1000).toFixed(1)}s`;
+}
 
 function toAudioInputDevices(devices: MediaDeviceInfo[]): AudioInputDevice[] {
   return devices
@@ -61,6 +67,9 @@ export default function App() {
       ? "openai"
       : "gemini"
   );
+  const [geminiModel, setGeminiModel] = useState(
+    () => window.localStorage.getItem(geminiModelStorageKey) ?? ""
+  );
 
   const geminiSession = useRealtimeTutorSession();
   const openAiSession = useOpenAiRealtimeSession();
@@ -73,10 +82,13 @@ export default function App() {
     liveTutorCaption,
     liveUserCaption,
     micLevel,
+    replyTimesMs,
     startSession,
     status,
     transcript
   } = activeSession;
+  const lastReplyMs = replyTimesMs.length ? replyTimesMs[replyTimesMs.length - 1] : null;
+  const medianReplyMs = medianMs(replyTimesMs);
 
   const deferredTranscript = useDeferredValue(transcript);
   const isSessionLive =
@@ -87,6 +99,11 @@ export default function App() {
       .then((payload) => {
         setBootstrap(payload);
         setProfile(payload.profile);
+        setGeminiModel((current) =>
+          payload.app.geminiModels.some((option) => option.id === current)
+            ? current
+            : payload.app.geminiDefaultModel
+        );
         setActivePreset(payload.sessionPresets[0] ?? null);
       })
       .catch((error) => {
@@ -137,6 +154,12 @@ export default function App() {
     window.localStorage.setItem(voiceEngineStorageKey, voiceEngine);
   }, [voiceEngine]);
 
+  useEffect(() => {
+    if (geminiModel) {
+      window.localStorage.setItem(geminiModelStorageKey, geminiModel);
+    }
+  }, [geminiModel]);
+
   const heroScenes = useMemo<CultureScene[]>(
     () => bootstrap?.cultureScenes ?? [],
     [bootstrap?.cultureScenes]
@@ -151,6 +174,7 @@ export default function App() {
     await startSession({
       deviceId: selectedAudioInputId || undefined,
       focus: activePreset.focus,
+      model: geminiModel || undefined,
       presetLabel: activePreset.label
     });
 
@@ -313,6 +337,27 @@ export default function App() {
             </div>
           </div>
 
+          {voiceEngine === "gemini" && (bootstrap?.app.geminiModels.length ?? 0) > 0 && (
+            <div className="audio-input-panel">
+              <label className="audio-input-label" htmlFor="gemini-model-select">
+                Gemini model
+              </label>
+              <select
+                id="gemini-model-select"
+                className="audio-input-select"
+                value={geminiModel}
+                onChange={(event) => setGeminiModel(event.target.value)}
+                disabled={status === "connecting" || isSessionLive}
+              >
+                {bootstrap?.app.geminiModels.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="audio-input-panel">
             <label className="audio-input-label" htmlFor="audio-input-select">
               Microphone
@@ -349,6 +394,13 @@ export default function App() {
             <div className="mic-meter-header">
               <small>Mic activity</small>
               <span>{micLevel > 0.09 ? "Hearing you" : "Waiting for speech"}</span>
+            </div>
+            <div className="mic-meter-header">
+              <small>Reply time</small>
+              <span>
+                last {formatSeconds(lastReplyMs)} · median {formatSeconds(medianReplyMs)}
+                {replyTimesMs.length > 0 ? ` (${replyTimesMs.length} replies)` : ""}
+              </span>
             </div>
             <div className="mic-meter-track" aria-hidden="true">
               <div

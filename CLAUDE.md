@@ -29,7 +29,7 @@ Copy `.env.example` to `.env` and populate:
 
 ```
 GEMINI_API_KEY=
-GEMINI_LIVE_MODEL=gemini-3.1-flash-live-preview
+GEMINI_LIVE_MODEL=gemini-3.8-live
 GEMINI_LIVE_VOICE=Callirrhoe
 OPENAI_API_KEY=
 OPENAI_SUMMARY_MODEL=gpt-4.1-mini

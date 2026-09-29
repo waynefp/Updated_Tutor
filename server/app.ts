@@ -23,6 +23,16 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// Gemini Live models selectable in the app. The env var picks the default.
+const GEMINI_LIVE_MODELS = [
+  { id: "gemini-3.8-live", label: "Gemini 3.8 Live" },
+  { id: "gemini-3.1-flash-live-preview", label: "Gemini 3.1 Flash Live (legacy)" }
+];
+
+function defaultGeminiModel() {
+  return process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
+}
+
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
 
@@ -31,7 +41,8 @@ app.get("/api/health", async (_request, response) => {
     ok: true,
     storage: await getStorageStatus(),
     models: {
-      gemini: process.env.GEMINI_LIVE_MODEL ?? "gemini-3.1-flash-live-preview",
+      gemini: defaultGeminiModel(),
+      geminiSelectable: GEMINI_LIVE_MODELS.map((option) => option.id),
       openai: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1"
     }
   });
@@ -44,7 +55,9 @@ app.get("/api/bootstrap", async (_request, response) => {
   response.json({
     app: {
       name: "Parola Viva",
-      voice: process.env.GEMINI_LIVE_VOICE ?? "Callirrhoe"
+      voice: process.env.GEMINI_LIVE_VOICE ?? "Callirrhoe",
+      geminiModels: GEMINI_LIVE_MODELS,
+      geminiDefaultModel: defaultGeminiModel()
     },
     profile: toClientProfile(memory),
     cultureScenes: assets.cultureScenes,
@@ -58,8 +71,9 @@ app.post("/api/live/session", async (request, response) => {
     return;
   }
 
-  const { focus, presetLabel } = request.body as {
+  const { focus, model: requestedModel, presetLabel } = request.body as {
     focus?: string;
+    model?: string;
     presetLabel?: string;
   };
 
@@ -69,7 +83,9 @@ app.post("/api/live/session", async (request, response) => {
   }
 
   const memory = await loadMemory();
-  const model = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.1-flash-live-preview";
+  const model = GEMINI_LIVE_MODELS.some((option) => option.id === requestedModel)
+    ? requestedModel!
+    : defaultGeminiModel();
   const voice = process.env.GEMINI_LIVE_VOICE ?? "Callirrhoe";
 
   response.json({

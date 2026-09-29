@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { arrayBufferToBase64, decodePcm16Base64 } from "../lib/audio";
 import { createLiveSession } from "../lib/api";
+import { createReplyTimer } from "../lib/replyTimer";
 import type {
   LessonTurn,
   RealtimeEventLogItem,
@@ -14,8 +15,14 @@ const GEMINI_WS_URL =
 type StartSessionInput = {
   deviceId?: string;
   focus: string;
+  model?: string;
   presetLabel: string;
 };
+
+// Sent right after setup so the tutor opens the lesson instead of waiting
+// for the learner. The system instruction describes how to open.
+const OPENER_TEXT =
+  "The lesson is starting now. Open it the way your instructions describe. Keep it short.";
 
 type GeminiServerMessage = {
   setupComplete?: Record<string, never>;
@@ -62,7 +69,10 @@ export function useRealtimeTutorSession() {
   const currentTutorCaptionRef = useRef("");
   const committedUserCaptionRef = useRef("");
   const committedTutorCaptionRef = useRef("");
+  const replyTimerRef = useRef(createReplyTimer());
+  const tutorAudioThisTurnRef = useRef(false);
 
+  const [replyTimesMs, setReplyTimesMs] = useState<number[]>([]);
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [eventLog, setEventLog] = useState<RealtimeEventLogItem[]>([]);
@@ -196,6 +206,7 @@ export function useRealtimeTutorSession() {
         const isSpeaking = level > 0.09;
         if (isSpeaking && !speechDetectedRef.current) {
           speechDetectedRef.current = true;
+          replyTimerRef.current.speechStarted();
           if (currentStatusRef.current === "ready") {
             updateStatus("listening");
           }
@@ -205,6 +216,7 @@ export function useRealtimeTutorSession() {
           );
         } else if (!isSpeaking && speechDetectedRef.current) {
           speechDetectedRef.current = false;
+          replyTimerRef.current.speechStopped();
           if (currentStatusRef.current === "listening") {
             updateStatus("ready");
           }
@@ -310,6 +322,7 @@ export function useRealtimeTutorSession() {
       if (message.serverContent?.interrupted && audioContextRef.current) {
         appendEvent("server.interrupted", "Gemini interrupted the current response.");
         nextPlayTimeRef.current = audioContextRef.current.currentTime;
+        tutorAudioThisTurnRef.current = false;
       }
 
       const userTranscript = message.serverContent?.inputTranscription?.text?.trim();
@@ -337,6 +350,17 @@ export function useRealtimeTutorSession() {
         }
 
         if (part.inlineData?.data) {
+          if (!tutorAudioThisTurnRef.current) {
+            tutorAudioThisTurnRef.current = true;
+            const replyMs = replyTimerRef.current.replyAudioStarted();
+            if (replyMs !== null) {
+              setReplyTimesMs((previous) => [...previous, replyMs]);
+              appendEvent(
+                "client.reply_time",
+                `Tutor audio started ${replyMs} ms after you stopped speaking.`
+              );
+            }
+          }
           playAudioChunk(part.inlineData.data);
           updateStatus("speaking");
         }
@@ -347,6 +371,7 @@ export function useRealtimeTutorSession() {
         message.serverContent?.generationComplete ||
         message.serverContent?.waitingForInput
       ) {
+        tutorAudioThisTurnRef.current = false;
         appendEvent("server.turn_complete", "Gemini completed a conversational turn.");
         finalizeTurn();
         if (currentStatusRef.current !== "error") {
@@ -366,6 +391,9 @@ export function useRealtimeTutorSession() {
       setLiveTutorCaption("");
       transcriptRef.current = [];
       setTranscript([]);
+      setReplyTimesMs([]);
+      replyTimerRef.current.reset();
+      tutorAudioThisTurnRef.current = false;
       updateStatus("connecting");
       appendEvent(
         "client.session.start",
@@ -375,8 +403,10 @@ export function useRealtimeTutorSession() {
       try {
         const liveSession = await createLiveSession({
           focus: input.focus,
+          model: input.model,
           presetLabel: input.presetLabel
         });
+        appendEvent("client.live.model", `Model: ${liveSession.model}`);
 
         const ws = new WebSocket(
           `${GEMINI_WS_URL}?key=${liveSession.apiKey}`
@@ -438,9 +468,14 @@ export function useRealtimeTutorSession() {
 
             await initializeMic(input.deviceId);
             updateStatus("ready");
-            appendEvent(
-              "client.session.ready",
-              "Mic active. Speak or wait for the tutor to begin."
+            appendEvent("client.session.ready", "Mic active. The tutor opens the lesson.");
+            ws.send(
+              JSON.stringify({
+                clientContent: {
+                  turns: [{ role: "user", parts: [{ text: OPENER_TEXT }] }],
+                  turnComplete: true
+                }
+              })
             );
             return;
           }
@@ -569,6 +604,7 @@ export function useRealtimeTutorSession() {
     liveUserCaption,
     micLevel,
     promptReply,
+    replyTimesMs,
     startSession,
     status,
     transcript

@@ -24,6 +24,7 @@ export async function fetchBootstrap(): Promise<BootstrapPayload> {
 
 export async function createLiveSession(input: {
   focus: string;
+  model?: string;
   presetLabel: string;
 }): Promise<LiveSessionPayload> {
   const response = await assertOk(
