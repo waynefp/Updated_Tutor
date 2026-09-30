@@ -2,7 +2,15 @@ import { head, put } from "@vercel/blob";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { LessonReflection, SavedVocabulary, TutorMemory } from "./types.js";
+import type {
+  LessonReflection,
+  ReflectedVocabulary,
+  SavedVocabulary,
+  SessionMode,
+  Trap,
+  TutorMemory,
+  VocabularyStage
+} from "./types.js";
 
 const seedMemoryPath = path.resolve(process.cwd(), "server", "data", "default-user.json");
 const tmpMemoryPath = path.join(os.tmpdir(), "parola-viva-memory.json");
@@ -12,6 +20,13 @@ const BLOB_PATHNAME = "parola-viva/memory.json";
 const MAX_VOCABULARY = 60;
 const MAX_SESSIONS = 20;
 const MAX_JOURNEY_ENTRIES = 24;
+const MAX_LEARNING_RECORDS = 40;
+const MAX_TRAPS = 12;
+// Spaced review: each unprompted use pushes the next review further out.
+const REVIEW_INTERVAL_DAYS = [1, 3, 7, 14, 30];
+// Unprompted uses (counted once per session) needed for a word to become "yours".
+const MASTERY_UNPROMPTED_USES = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Bridges Blob CDN cache staleness within a warm serverless instance:
 // the most recently written memory always wins over a cached read.
@@ -82,14 +97,28 @@ const fallbackSeed: TutorMemory = {
     ],
     curriculum: { mastered: [], workingOn: [], strugglingWith: [] },
     journey: [],
-    nextSessionPlan: null
+    nextSessionPlan: null,
+    mission: null,
+    learningRecords: [],
+    traps: []
   },
   recentVocabulary: [],
   sessions: []
 };
 
-// Older memory files predate curriculum/journey/nextSessionPlan and vocabulary
-// strength — fill the gaps so every caller sees the full shape.
+function addDays(iso: string, days: number) {
+  return new Date(new Date(iso).getTime() + days * DAY_MS).toISOString();
+}
+
+// Words saved before stages existed get one from their strength rating.
+function stageFromStrength(strength: number): VocabularyStage {
+  if (strength >= 5) return "mastered";
+  if (strength >= 3) return "practicing";
+  return "new";
+}
+
+// Older memory files predate curriculum/journey/plan, the /teach fields and
+// word stages — fill the gaps so every caller sees the full shape.
 function normalizeMemory(raw: TutorMemory): TutorMemory {
   raw.profile.curriculum ??= { mastered: [], workingOn: [], strugglingWith: [] };
   raw.profile.curriculum.mastered ??= [];
@@ -97,13 +126,54 @@ function normalizeMemory(raw: TutorMemory): TutorMemory {
   raw.profile.curriculum.strugglingWith ??= [];
   raw.profile.journey ??= [];
   raw.profile.nextSessionPlan ??= null;
-  raw.recentVocabulary = (raw.recentVocabulary ?? []).map((item) => ({
-    ...item,
-    strength: item.strength ?? 2,
-    lastPracticedAt: item.lastPracticedAt ?? raw.updatedAt
+  raw.profile.mission ??= null;
+  raw.profile.learningRecords ??= [];
+  raw.profile.traps = (raw.profile.traps ?? []).map((trap) => ({
+    ...trap,
+    cleanChecks: trap.cleanChecks ?? 0
   }));
+  raw.recentVocabulary = (raw.recentVocabulary ?? []).map((item) => {
+    const strength = item.strength ?? 2;
+    const lastPracticedAt = item.lastPracticedAt ?? raw.updatedAt;
+    const reviewStep = item.reviewStep ?? 0;
+    return {
+      ...item,
+      strength,
+      lastPracticedAt,
+      stage: item.stage ?? stageFromStrength(strength),
+      unpromptedUses: item.unpromptedUses ?? 0,
+      reviewStep,
+      nextReviewAt: item.nextReviewAt ?? addDays(lastPracticedAt, REVIEW_INTERVAL_DAYS[reviewStep])
+    };
+  });
   raw.sessions ??= [];
   return raw;
+}
+
+// Words due for a "ti ricordi?" check, most overdue first. Words already
+// mastered come last: they are the floor, not the lesson.
+export function wordsDueForReview(memory: TutorMemory, now = new Date(), limit = 4) {
+  const stageOrder: Record<VocabularyStage, number> = { practicing: 0, new: 1, mastered: 2 };
+  return memory.recentVocabulary
+    .filter((item) => item.nextReviewAt && new Date(item.nextReviewAt) <= now)
+    .sort((a, b) => {
+      const byStage = stageOrder[a.stage ?? "new"] - stageOrder[b.stage ?? "new"];
+      if (byStage !== 0) return byStage;
+      return new Date(a.nextReviewAt!).getTime() - new Date(b.nextReviewAt!).getTime();
+    })
+    .slice(0, limit);
+}
+
+// Active traps least recently checked first: the ones most worth re-checking.
+export function trapsToRecheck(memory: TutorMemory, limit = 2) {
+  return memory.profile.traps
+    .filter((trap) => trap.status === "active")
+    .sort(
+      (a, b) =>
+        new Date(a.lastCheckedAt ?? a.firstSeenAt).getTime() -
+        new Date(b.lastCheckedAt ?? b.firstSeenAt).getTime()
+    )
+    .slice(0, limit);
 }
 
 function newerOf(a: TutorMemory | null, b: TutorMemory | null): TutorMemory | null {
@@ -191,122 +261,270 @@ export async function saveMemory(memory: TutorMemory) {
   return memory;
 }
 
+
 function dedupe(items: string[], limit: number) {
   return [...new Set(items.map((item) => item.trim()).filter(Boolean))].slice(0, limit);
 }
 
-// New reflections update existing entries in place (strength, freshness) instead
-// of duplicating them; brand-new words go to the front.
+const normalizeKey = (text: string) =>
+  text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?¿¡,;:"'“”‘’…]/g, "")
+    .replace(/\s+/g, " ");
+
+// Applies one session's evidence to a word: stage and spaced review are decided
+// here, from the evidence, never by the model's say-so.
+function scheduleWord(
+  word: SavedVocabulary,
+  evidence: ReflectedVocabulary["evidence"],
+  at: string,
+  isNew: boolean
+): SavedVocabulary {
+  const next = { ...word };
+  let step = next.reviewStep ?? 0;
+  let stage: VocabularyStage = next.stage ?? "new";
+
+  switch (evidence) {
+    case "used_unprompted":
+      next.unpromptedUses = (next.unpromptedUses ?? 0) + 1;
+      step = Math.min(step + 1, REVIEW_INTERVAL_DAYS.length - 1);
+      if (stage === "new") stage = "practicing";
+      if (stage === "practicing" && next.unpromptedUses >= MASTERY_UNPROMPTED_USES) {
+        stage = "mastered";
+      }
+      break;
+    case "used_with_help":
+      // Practised, but retrieval still needed a push: same interval again.
+      break;
+    case "not_recalled":
+      step = 0;
+      if (stage === "mastered") stage = "practicing";
+      break;
+    case "heard_only":
+      // Hearing a word is coverage, not learning. Only brand-new words get a
+      // first review date; known words keep their schedule untouched.
+      if (!isNew) return next;
+      step = 0;
+      break;
+  }
+
+  next.stage = stage;
+  next.reviewStep = step;
+  next.lastPracticedAt = at;
+  next.nextReviewAt = addDays(at, REVIEW_INTERVAL_DAYS[step]);
+  return next;
+}
+
 function mergeVocabulary(
   existing: SavedVocabulary[],
-  incoming: SavedVocabulary[],
-  practicedAt: string
+  incoming: ReflectedVocabulary[],
+  at: string
 ): SavedVocabulary[] {
-  const byItalian = new Map(
-    existing.map((item) => [item.italian.trim().toLowerCase(), item])
-  );
+  const byKey = new Map(existing.map((item) => [normalizeKey(item.italian), item]));
+  const updated = new Map<string, SavedVocabulary>();
   const fresh: SavedVocabulary[] = [];
 
   for (const item of incoming) {
-    const key = item.italian.trim().toLowerCase();
-    if (!key) continue;
-    const known = byItalian.get(key);
+    const key = normalizeKey(item.italian);
+    if (!key || updated.has(key)) continue;
+    const known = byKey.get(key);
     if (known) {
-      known.english = item.english || known.english;
-      known.example = item.example || known.example;
-      known.strength = item.strength ?? known.strength;
-      known.lastPracticedAt = practicedAt;
+      updated.set(
+        key,
+        scheduleWord(
+          {
+            ...known,
+            english: item.english || known.english,
+            example: item.example || known.example,
+            strength: item.strength ?? known.strength
+          },
+          item.evidence,
+          at,
+          false
+        )
+      );
     } else {
-      byItalian.set(key, item);
-      fresh.push({
-        ...item,
-        strength: item.strength ?? 1,
-        lastPracticedAt: practicedAt
-      });
+      const word = scheduleWord(
+        {
+          italian: item.italian.trim(),
+          english: item.english,
+          example: item.example,
+          strength: item.strength ?? 1,
+          stage: "new",
+          unpromptedUses: 0,
+          reviewStep: 0
+        },
+        item.evidence,
+        at,
+        true
+      );
+      updated.set(key, word);
+      fresh.push(word);
     }
   }
 
-  return [...fresh, ...existing].slice(0, MAX_VOCABULARY);
+  const merged = existing.map((item) => updated.get(normalizeKey(item.italian)) ?? item);
+  return [...fresh, ...merged].slice(0, MAX_VOCABULARY);
 }
 
-export async function applyReflection(input: {
-  reflection: LessonReflection;
-  focus: string;
-  presetLabel: string;
-  startedAt: string;
-  endedAt: string;
-}) {
-  const memory = await loadMemory();
-  const startedAt = new Date(input.startedAt);
-  const endedAt = new Date(input.endedAt);
+function mergeTraps(existing: Trap[], reflection: LessonReflection, at: string): Trap[] {
+  const traps = existing.map((trap) => ({ ...trap }));
+  const byKey = new Map(traps.map((trap) => [normalizeKey(trap.wrong), trap]));
+  const seenThisSession = new Set<string>();
+
+  for (const item of reflection.traps) {
+    const key = normalizeKey(item.wrong);
+    if (!key) continue;
+    seenThisSession.add(key);
+    const known = byKey.get(key);
+    if (known) {
+      known.timesSeen += 1;
+      known.lastSeenAt = at;
+      known.right = item.right || known.right;
+      known.note = item.note || known.note;
+      known.status = "active";
+      known.cleanChecks = 0;
+    } else {
+      const trap: Trap = {
+        id: crypto.randomUUID(),
+        wrong: item.wrong.trim(),
+        right: item.right.trim(),
+        note: item.note.trim(),
+        status: "active",
+        timesSeen: 1,
+        cleanChecks: 0,
+        firstSeenAt: at,
+        lastSeenAt: at
+      };
+      traps.unshift(trap);
+      byKey.set(key, trap);
+    }
+  }
+
+  // A re-checked trap the learner did not fall into counts as a clean check.
+  for (const wrong of reflection.trapsRechecked) {
+    const key = normalizeKey(wrong);
+    const trap = byKey.get(key);
+    if (!trap) continue;
+    trap.lastCheckedAt = at;
+    if (!seenThisSession.has(key)) {
+      trap.cleanChecks += 1;
+      if (trap.cleanChecks >= 2) trap.status = "resolved";
+    }
+  }
+
+  return traps.slice(0, MAX_TRAPS);
+}
+
+// Pure: returns the updated memory without saving, so it can be tested on a copy.
+export function mergeReflection(
+  current: TutorMemory,
+  input: {
+    reflection: LessonReflection;
+    focus: string;
+    presetLabel: string;
+    mode: SessionMode;
+    objective?: string;
+    startedAt: string;
+    endedAt: string;
+  }
+): TutorMemory {
+  const memory = structuredClone(current);
+  const { reflection, endedAt } = input;
   const durationMinutes = Math.max(
     1,
-    Math.round((endedAt.getTime() - startedAt.getTime()) / 60000)
+    Math.round((new Date(endedAt).getTime() - new Date(input.startedAt).getTime()) / 60000)
   );
 
-  memory.profile.levelEstimate = input.reflection.updatedProfile.levelEstimate;
-  memory.profile.confidence = input.reflection.updatedProfile.confidence;
+  memory.profile.levelEstimate = reflection.updatedProfile.levelEstimate;
+  memory.profile.confidence = reflection.updatedProfile.confidence;
   memory.profile.preferredTopics = dedupe(
-    [
-      ...input.reflection.updatedProfile.preferredTopics,
-      ...memory.profile.preferredTopics
-    ],
+    [...reflection.updatedProfile.preferredTopics, ...memory.profile.preferredTopics],
     8
   );
-  memory.profile.correctionPriorities = dedupe(
-    [
-      ...input.reflection.updatedProfile.correctionPriorities,
-      ...memory.profile.correctionPriorities
-    ],
-    6
-  );
-  memory.profile.nextSessionFocus = input.reflection.updatedProfile.nextSessionFocus;
-  memory.profile.tutorNotes = dedupe(
-    [...input.reflection.updatedProfile.tutorNotes, ...memory.profile.tutorNotes],
-    6
-  );
+  // Reflection returns these lists already consolidated, so they replace the
+  // old ones; appending is what produced near-duplicate lines before.
+  memory.profile.correctionPriorities = dedupe(reflection.updatedProfile.correctionPriorities, 5);
+  memory.profile.tutorNotes = dedupe(reflection.updatedProfile.tutorNotes, 6);
+  memory.profile.nextSessionFocus = reflection.updatedProfile.nextSessionFocus;
 
   memory.profile.curriculum = {
-    mastered: dedupe(input.reflection.curriculum.mastered, 10),
-    workingOn: dedupe(input.reflection.curriculum.workingOn, 8),
-    strugglingWith: dedupe(input.reflection.curriculum.strugglingWith, 6)
+    mastered: dedupe(reflection.curriculum.mastered, 10),
+    workingOn: dedupe(reflection.curriculum.workingOn, 8),
+    strugglingWith: dedupe(reflection.curriculum.strugglingWith, 6)
   };
 
-  const journeyEntry = input.reflection.journeyUpdate.trim();
+  const journeyEntry = reflection.journeyUpdate.trim();
   if (journeyEntry) {
-    const dateLabel = input.endedAt.slice(0, 10);
     memory.profile.journey = [
       ...memory.profile.journey,
-      `${dateLabel}: ${journeyEntry}`
+      `${endedAt.slice(0, 10)}: ${journeyEntry}`
     ].slice(-MAX_JOURNEY_ENTRIES);
   }
 
-  memory.profile.nextSessionPlan = input.reflection.nextSessionPlan;
+  memory.profile.nextSessionPlan = reflection.nextSessionPlan;
 
-  memory.recentVocabulary = mergeVocabulary(
-    memory.recentVocabulary,
-    input.reflection.vocabulary,
-    input.endedAt
-  );
+  if (reflection.mission && (input.mode === "mission" || !memory.profile.mission)) {
+    memory.profile.mission = {
+      why: reflection.mission.why,
+      successLooksLike: dedupe(reflection.mission.successLooksLike, 6),
+      constraints: dedupe(reflection.mission.constraints, 6),
+      outOfScope: dedupe(reflection.mission.outOfScope, 6),
+      setAt: endedAt
+    };
+  }
+
+  memory.profile.learningRecords = [
+    ...memory.profile.learningRecords,
+    ...reflection.learningRecords
+      .filter((record) => record.title.trim() && record.evidence.trim())
+      .map((record) => ({
+        id: crypto.randomUUID(),
+        dateIso: endedAt,
+        kind: record.kind,
+        title: record.title.trim(),
+        evidence: record.evidence.trim()
+      }))
+  ].slice(-MAX_LEARNING_RECORDS);
+
+  memory.profile.traps = mergeTraps(memory.profile.traps, reflection, endedAt);
+
+  memory.recentVocabulary = mergeVocabulary(memory.recentVocabulary, reflection.vocabulary, endedAt);
 
   memory.sessions = [
     {
       id: crypto.randomUUID(),
-      title: input.reflection.title,
+      title: reflection.title,
       focus: input.focus,
       presetLabel: input.presetLabel,
-      dateIso: input.endedAt,
+      mode: input.mode,
+      objective: input.objective,
+      objectiveResult: reflection.objectiveOutcome.result,
+      objectiveEvidence: reflection.objectiveOutcome.evidence,
+      dateIso: endedAt,
       durationMinutes,
-      summary: input.reflection.summary,
-      strengths: input.reflection.strengths,
-      needsWork: input.reflection.needsWork,
-      nextDrills: input.reflection.nextDrills,
-      cultureMoments: input.reflection.cultureMoments,
-      vocabulary: input.reflection.vocabulary
+      summary: reflection.summary,
+      strengths: reflection.strengths,
+      needsWork: reflection.needsWork,
+      nextDrills: reflection.nextDrills,
+      cultureMoments: reflection.cultureMoments,
+      vocabulary: reflection.vocabulary.map(({ italian, english, example, strength }) => ({
+        italian,
+        english,
+        example,
+        strength
+      })),
+      lessonAudit: reflection.lessonAudit
     },
     ...memory.sessions
   ].slice(0, MAX_SESSIONS);
 
+  return memory;
+}
+
+export async function applyReflection(input: Parameters<typeof mergeReflection>[1]) {
+  const memory = mergeReflection(await loadMemory(), input);
   await saveMemory(memory);
   return memory;
 }
@@ -322,11 +540,21 @@ export function toClientProfile(memory: TutorMemory) {
     correctionPriorities: memory.profile.correctionPriorities,
     nextSessionFocus: memory.profile.nextSessionFocus,
     tutorNotes: memory.profile.tutorNotes,
-    recentVocabulary: memory.recentVocabulary.slice(0, 12),
+    curriculum: memory.profile.curriculum,
+    journey: memory.profile.journey.slice(-6),
+    nextSessionPlan: memory.profile.nextSessionPlan,
+    mission: memory.profile.mission,
+    traps: memory.profile.traps.filter((trap) => trap.status === "active"),
+    learningRecords: memory.profile.learningRecords.slice(-10).reverse(),
+    reviewDue: wordsDueForReview(memory).map((item) => item.italian),
+    recentVocabulary: memory.recentVocabulary,
     recentSessions: memory.sessions.slice(0, 8).map((session) => ({
       id: session.id,
       title: session.title,
       focus: session.focus,
+      mode: session.mode,
+      objective: session.objective,
+      objectiveResult: session.objectiveResult,
       dateIso: session.dateIso,
       durationMinutes: session.durationMinutes,
       summary: session.summary,

@@ -26,21 +26,18 @@
       "Regional food"
     ],
     "correctionPriorities": [
-      "Focus on one high-impact correction each session",
-      "Use spoken recasts over explanations",
-      "Keep feedback brief and actionable",
-      "Avoid overemphasis on pronunciation at this stage",
       "Correct one high-impact issue at a time",
-      "Favor spoken recasts over grammar lectures"
+      "Favor spoken recasts over grammar lectures",
+      "Keep feedback brief and actionable",
+      "Avoid overemphasis on pronunciation at this stage"
     ],
     "nextSessionFocus": "Simple self-introductions and easy follow-up questions to build sentence formation and fluency",
     "tutorNotes": [
-      "Keep session pacing gentle and supportive.",
-      "Encourage repetition aloud of key phrases to improve recall.",
-      "Use English when necessary for confidence but gradually reduce.",
-      "Focus on making full simple sentences instead of single words or mixed languages.",
-      "Reward brave attempts quickly to build learner motivation.",
-      "Continue gentle pacing and immediate positive feedback."
+      "Keep pacing gentle, with immediate positive feedback",
+      "Encourage repetition aloud of key phrases to improve recall",
+      "Use English when needed for confidence, but gradually reduce it",
+      "Push for full simple sentences instead of single words or mixed languages",
+      "Reward brave attempts quickly to build motivation"
     ],
     "curriculum": {
       "mastered": [],

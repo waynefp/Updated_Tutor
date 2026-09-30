@@ -9,7 +9,12 @@ import {
   loadMemory,
   toClientProfile
 } from "./lib/memoryStore.js";
-import { buildTutorInstructions, getBootstrapAssets } from "./lib/prompts.js";
+import {
+  buildTutorInstructions,
+  getBootstrapAssets,
+  getSessionContext,
+  getSessionPresets
+} from "./lib/prompts.js";
 import { reflectLessonWithAI } from "./lib/reflection.js";
 import type { LessonTurn } from "./lib/types.js";
 
@@ -51,7 +56,7 @@ app.get("/api/health", async (_request, response) => {
 
 app.get("/api/bootstrap", async (_request, response) => {
   const memory = await loadMemory();
-  const assets = getBootstrapAssets();
+  const assets = getBootstrapAssets(memory);
 
   response.json({
     app: {
@@ -64,6 +69,39 @@ app.get("/api/bootstrap", async (_request, response) => {
     cultureScenes: assets.cultureScenes,
     sessionPresets: assets.sessionPresets
   });
+});
+
+// Prompt preview: exactly what the tutor will be told for a given preset and
+// engine, so the teaching setup can be read before a lesson.
+// /api/debug/prompt?preset=Lucia's%20plan&engine=gemini
+app.get("/api/debug/prompt", async (request, response) => {
+  const memory = await loadMemory();
+  const presets = getSessionPresets(memory);
+  const requested = typeof request.query.preset === "string" ? request.query.preset : "";
+  const preset = presets.find((item) => item.label === requested) ?? presets[0];
+  const engine = request.query.engine === "openai" ? "openai" : "gemini";
+  const { mode, objective } = getSessionContext(memory, {
+    focus: preset.focus,
+    presetLabel: preset.label
+  });
+
+  response
+    .type("text/plain; charset=utf-8")
+    .send(
+      [
+        `Preset: ${preset.label} · mode: ${mode} · engine: ${engine}`,
+        `Goal: ${objective ?? "(none)"}`,
+        `Other presets: ${presets.map((item) => item.label).join(" | ")}`,
+        "",
+        "=".repeat(72),
+        "",
+        buildTutorInstructions(memory, {
+          focus: preset.focus,
+          presetLabel: preset.label,
+          engine
+        })
+      ].join("\n")
+    );
 });
 
 app.post("/api/live/session", async (request, response) => {
@@ -265,11 +303,14 @@ app.post("/api/lessons/reflect", async (request, response) => {
   }
 
   const memory = await loadMemory();
+  const { mode, objective } = getSessionContext(memory, { focus, presetLabel });
   const reflection = await reflectLessonWithAI({
     client: openai,
     memory,
     focus,
     presetLabel,
+    mode,
+    objective,
     turns: capture.turns
   });
 
@@ -277,6 +318,8 @@ app.post("/api/lessons/reflect", async (request, response) => {
     reflection,
     focus,
     presetLabel,
+    mode,
+    objective,
     startedAt: capture.startedAt,
     endedAt: capture.endedAt
   });

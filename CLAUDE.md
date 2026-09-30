@@ -53,9 +53,12 @@ VITE_API_BASE_URL=http://localhost:8787
 | File | Responsibility |
 |------|---------------|
 | `server/app.ts` | Express routes: bootstrap, live/session, lessons/reflect |
-| `server/lib/prompts.ts` | Session presets, culture scenes, `buildTutorInstructions()` |
+| `server/lib/prompts.ts` | Session presets and modes (plan / topic / chat / mission), `buildTutorInstructions()` with /teach lesson slots |
+| `server/lib/persona.ts` | Lucia Esposito persona text used in the prompt (review copy: `docs/teaching/TUTOR-PERSONA.md`) |
 | `server/lib/memoryStore.ts` | Read/write/merge learner profile JSON; dedup vocab & sessions |
-| `server/lib/reflection.ts` | OpenAI Responses API call with strict JSON schema for lesson analysis |
+| `server/lib/reflection.ts` | OpenAI Responses API call with strict JSON schema for lesson analysis; vocabulary evidence re-verified against the transcript |
+| `client/src/hooks/useGptLiveSession.ts` | GPT-Live (gpt-live-1) WebRTC engine; server creates the session via `POST /api/live/gpt-live-session` |
+| `scripts/` | Dev tools (`npx tsx scripts/<name>.ts`): `gemini-live-smoke`, `gpt-live-smoke`, `teach-dry-run` (reflection on synthetic transcripts, saves nothing), `prompt-preview` |
 | `server/lib/types.ts` | Server-side types (TutorMemory, SessionRecord, etc.) |
 | `client/src/hooks/useRealtimeTutorSession.ts` | Gemini Live WebSocket session, AudioContext mic capture, PCM playback |
 | `client/src/App.tsx` | Entire UI; all state lives here |

@@ -5,16 +5,62 @@ export type LessonTurn = {
   timestamp: string;
 };
 
+export type VocabularyStage = "new" | "practicing" | "mastered";
+
 export type SavedVocabulary = {
   italian: string;
   english: string;
   example: string;
+  strength?: number;
+  stage?: VocabularyStage;
+  unpromptedUses?: number;
+  lastPracticedAt?: string;
+  nextReviewAt?: string;
+};
+
+export type SessionMode = "plan" | "topic" | "chat" | "mission";
+
+export type Mission = {
+  why: string;
+  successLooksLike: string[];
+  constraints: string[];
+  outOfScope: string[];
+  setAt: string;
+};
+
+export type Trap = {
+  id: string;
+  wrong: string;
+  right: string;
+  note: string;
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
+export type LearningRecord = {
+  id: string;
+  dateIso: string;
+  kind: "demonstrated" | "prior_knowledge" | "misconception_corrected" | "mission_shift";
+  title: string;
+  evidence: string;
+};
+
+export type NextSessionPlan = {
+  objective?: string;
+  openerNote: string;
+  warmupVocabulary: string[];
+  reinforce: string;
+  introduce: string;
 };
 
 export type RecentSession = {
   id: string;
   title: string;
   focus: string;
+  mode?: SessionMode;
+  objective?: string;
+  objectiveResult?: "won" | "partly" | "not_yet" | "no_objective";
   dateIso: string;
   durationMinutes: number;
   summary: string;
@@ -32,12 +78,21 @@ export type TutorProfile = {
   correctionPriorities: string[];
   nextSessionFocus: string;
   tutorNotes: string[];
+  curriculum: { mastered: string[]; workingOn: string[]; strugglingWith: string[] };
+  journey: string[];
+  nextSessionPlan: NextSessionPlan | null;
+  mission: Mission | null;
+  traps: Trap[];
+  learningRecords: LearningRecord[];
+  // Italian items due for a "ti ricordi?" check, most overdue first.
+  reviewDue: string[];
   recentVocabulary: SavedVocabulary[];
   recentSessions: RecentSession[];
 };
 
 export type SessionPreset = {
   id: string;
+  mode: SessionMode;
   title: string;
   label: string;
   focus: string;
