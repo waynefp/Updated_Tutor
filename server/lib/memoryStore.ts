@@ -532,6 +532,8 @@ export async function applyReflection(input: Parameters<typeof mergeReflection>[
 export function toClientProfile(memory: TutorMemory) {
   return {
     learnerName: memory.learnerName,
+    // Lessons recorded so far; the next lesson is folio sessionCount + 1.
+    sessionCount: memory.sessions.length,
     levelEstimate: memory.profile.levelEstimate,
     confidence: memory.profile.confidence,
     goals: memory.profile.goals,

@@ -70,6 +70,7 @@ export type RecentSession = {
 
 export type TutorProfile = {
   learnerName: string;
+  sessionCount: number;
   levelEstimate: string;
   confidence: string;
   goals: string[];
@@ -148,7 +149,24 @@ export type LessonReflection = {
   needsWork: string[];
   nextDrills: string[];
   cultureMoments: string[];
-  vocabulary: SavedVocabulary[];
+  vocabulary: Array<
+    SavedVocabulary & {
+      evidence: "used_unprompted" | "used_with_help" | "not_recalled" | "heard_only";
+    }
+  >;
+  nextSessionPlan: NextSessionPlan & { objective: string };
+  objectiveOutcome: {
+    result: "won" | "partly" | "not_yet" | "no_objective";
+    evidence: string;
+  };
+  learningRecords: Array<Pick<LearningRecord, "kind" | "title" | "evidence">>;
+  traps: Array<{ wrong: string; right: string; note: string; fixedThisSession: boolean }>;
+  mission: Omit<Mission, "setAt"> | null;
+  lessonAudit: Array<{
+    rule: string;
+    followed: "yes" | "no" | "not_applicable";
+    evidence: string;
+  }>;
   updatedProfile: {
     levelEstimate: string;
     confidence: string;

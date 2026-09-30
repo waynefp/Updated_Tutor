@@ -1,48 +1,35 @@
-import {
-  startTransition,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState
-} from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { fetchBootstrap, reflectLesson } from "./lib/api";
 import { useRealtimeTutorSession } from "./hooks/useRealtimeTutorSession";
 import { useOpenAiRealtimeSession } from "./hooks/useOpenAiRealtimeSession";
 import { useGptLiveSession } from "./hooks/useGptLiveSession";
-import { medianMs } from "./lib/replyTimer";
+import { HomeSpread } from "./components/HomeSpread";
+import { LessonView } from "./components/LessonView";
+import { SavingView, SummarySheet } from "./components/SummarySheet";
+import { WordsPage } from "./components/WordsPage";
+import { DiaryPage } from "./components/DiaryPage";
+import { SettingsDrawer } from "./components/SettingsDrawer";
+import { PREVIEW_REFLECTION, PREVIEW_TRANSCRIPT, readPreviewScreen } from "./dev/previewData";
 import type {
   AudioInputDevice,
   BootstrapPayload,
-  CultureScene,
   LessonReflection,
   SessionPreset,
   TutorProfile,
   VoiceEngine
 } from "./types";
 
-const statusCopy: Record<string, string> = {
-  idle: "Ready when you are.",
-  connecting: "Connecting your voice studio.",
-  ready: "Tutor is listening for the next turn.",
-  listening: "Your microphone is live.",
-  speaking: "Tutor is speaking now.",
-  error: "Session needs attention."
-};
-
-function formatRelativeDate(dateIso: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric"
-  }).format(new Date(dateIso));
-}
+type View = "oggi" | "parole" | "diario";
 
 const audioDeviceStorageKey = "parola-viva.audio-input";
 const voiceEngineStorageKey = "parola-viva.voice-engine";
 const geminiModelStorageKey = "parola-viva.gemini-model";
 
-function formatSeconds(ms: number | null) {
-  return ms === null ? "–" : `${(ms / 1000).toFixed(1)}s`;
-}
+const VIEWS: Array<{ id: View; label: string }> = [
+  { id: "oggi", label: "Oggi" },
+  { id: "parole", label: "Parole" },
+  { id: "diario", label: "Diario" }
+];
 
 function toAudioInputDevices(devices: MediaDeviceInfo[]): AudioInputDevice[] {
   return devices
@@ -59,10 +46,14 @@ export default function App() {
   const [profile, setProfile] = useState<TutorProfile | null>(null);
   const [activePreset, setActivePreset] = useState<SessionPreset | null>(null);
   const [reflection, setReflection] = useState<LessonReflection | null>(null);
+  const [profileBefore, setProfileBefore] = useState<TutorProfile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [audioInputs, setAudioInputs] = useState<AudioInputDevice[]>([]);
-  const [selectedAudioInputId, setSelectedAudioInputId] = useState("");
+  const [selectedAudioInputId, setSelectedAudioInputId] = useState(
+    () => window.localStorage.getItem(audioDeviceStorageKey) ?? ""
+  );
   const [voiceEngine, setVoiceEngine] = useState<VoiceEngine>(() => {
     const saved = window.localStorage.getItem(voiceEngineStorageKey);
     return saved === "openai" || saved === "gptlive" ? saved : "gemini";
@@ -70,90 +61,66 @@ export default function App() {
   const [geminiModel, setGeminiModel] = useState(
     () => window.localStorage.getItem(geminiModelStorageKey) ?? ""
   );
+  // The page lives in the address (#parole, #diario) so it can be bookmarked.
+  const [view, setViewState] = useState<View>(() => {
+    const fromHash = window.location.hash.slice(1);
+    return VIEWS.some((item) => item.id === fromHash) ? (fromHash as View) : "oggi";
+  });
+  const setView = useCallback((next: View) => {
+    setViewState(next);
+    window.history.replaceState(null, "", next === "oggi" ? window.location.pathname + window.location.search : `#${next}`);
+    window.scrollTo({ top: 0 });
+  }, []);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [lessonOpen, setLessonOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [showDebug] = useState(() => new URLSearchParams(window.location.search).has("debug"));
+  const [preview] = useState(readPreviewScreen);
 
   const geminiSession = useRealtimeTutorSession();
   const openAiSession = useOpenAiRealtimeSession();
   const gptLiveSession = useGptLiveSession();
   const activeSession =
-    voiceEngine === "openai"
-      ? openAiSession
-      : voiceEngine === "gptlive"
-        ? gptLiveSession
-        : geminiSession;
+    voiceEngine === "openai" ? openAiSession : voiceEngine === "gptlive" ? gptLiveSession : geminiSession;
+  const { endSession, eventLog, error: sessionError, startSession, status } = activeSession;
+  const isSessionLive = status === "ready" || status === "listening" || status === "speaking";
 
-  const {
-    endSession,
-    eventLog,
-    error: sessionError,
-    liveTutorCaption,
-    liveUserCaption,
-    micLevel,
-    replyTimesMs,
-    startSession,
-    status,
-    transcript
-  } = activeSession;
-  const lastReplyMs = replyTimesMs.length ? replyTimesMs[replyTimesMs.length - 1] : null;
-  const medianReplyMs = medianMs(replyTimesMs);
-
-  const deferredTranscript = useDeferredValue(transcript);
-  const isSessionLive =
-    status === "ready" || status === "listening" || status === "speaking";
+  const applyBootstrap = useCallback((payload: BootstrapPayload) => {
+    setBootstrap(payload);
+    setProfile(payload.profile);
+    // The server orders presets: Missione first until a mission exists, then Lucia's plan.
+    setActivePreset(payload.sessionPresets[0] ?? null);
+    setGeminiModel((current) =>
+      payload.app.geminiModels.some((option) => option.id === current)
+        ? current
+        : payload.app.geminiDefaultModel
+    );
+  }, []);
 
   useEffect(() => {
     fetchBootstrap()
-      .then((payload) => {
-        setBootstrap(payload);
-        setProfile(payload.profile);
-        setGeminiModel((current) =>
-          payload.app.geminiModels.some((option) => option.id === current)
-            ? current
-            : payload.app.geminiDefaultModel
-        );
-        setActivePreset(payload.sessionPresets[0] ?? null);
-      })
+      .then(applyBootstrap)
       .catch((error) => {
         setLoadError(error instanceof Error ? error.message : "Unable to load the app.");
       });
-  }, []);
-
-  useEffect(() => {
-    const savedInputId = window.localStorage.getItem(audioDeviceStorageKey);
-    if (savedInputId) {
-      setSelectedAudioInputId(savedInputId);
-    }
-  }, []);
+  }, [applyBootstrap]);
 
   useEffect(() => {
     async function loadAudioInputs() {
-      if (!navigator.mediaDevices?.enumerateDevices) {
-        return;
-      }
-
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const inputs = toAudioInputDevices(devices);
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const inputs = toAudioInputDevices(await navigator.mediaDevices.enumerateDevices());
       setAudioInputs(inputs);
-
-      setSelectedAudioInputId((current) => {
-        if (current && inputs.some((device) => device.deviceId === current)) {
-          return current;
-        }
-        return inputs[0]?.deviceId ?? "";
-      });
+      setSelectedAudioInputId((current) =>
+        current && inputs.some((device) => device.deviceId === current) ? current : inputs[0]?.deviceId ?? ""
+      );
     }
-
     void loadAudioInputs();
     navigator.mediaDevices?.addEventListener?.("devicechange", loadAudioInputs);
-    return () => {
-      navigator.mediaDevices?.removeEventListener?.("devicechange", loadAudioInputs);
-    };
+    return () => navigator.mediaDevices?.removeEventListener?.("devicechange", loadAudioInputs);
   }, []);
 
   useEffect(() => {
-    if (!selectedAudioInputId) {
-      return;
-    }
-    window.localStorage.setItem(audioDeviceStorageKey, selectedAudioInputId);
+    if (selectedAudioInputId) window.localStorage.setItem(audioDeviceStorageKey, selectedAudioInputId);
   }, [selectedAudioInputId]);
 
   useEffect(() => {
@@ -161,45 +128,44 @@ export default function App() {
   }, [voiceEngine]);
 
   useEffect(() => {
-    if (geminiModel) {
-      window.localStorage.setItem(geminiModelStorageKey, geminiModel);
-    }
+    if (geminiModel) window.localStorage.setItem(geminiModelStorageKey, geminiModel);
   }, [geminiModel]);
 
-  const heroScenes = useMemo<CultureScene[]>(
-    () => bootstrap?.cultureScenes ?? [],
-    [bootstrap?.cultureScenes]
-  );
+  // A lesson only saves through "Fine e salva": warn before the tab closes mid-lesson.
+  useEffect(() => {
+    if (!isSessionLive) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isSessionLive]);
 
   async function handleStart() {
-    if (!activePreset) {
-      return;
-    }
-
+    if (!activePreset) return;
     setReflection(null);
+    setSaveError(null);
+    setSummaryOpen(false);
+    setLessonOpen(true);
     await startSession({
       deviceId: selectedAudioInputId || undefined,
       focus: activePreset.focus,
       model: geminiModel || undefined,
       presetLabel: activePreset.label
     });
-
     if (navigator.mediaDevices?.enumerateDevices) {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setAudioInputs(toAudioInputDevices(devices));
+      setAudioInputs(toAudioInputDevices(await navigator.mediaDevices.enumerateDevices()));
     }
   }
 
   async function handleEnd() {
-    if (!activePreset) {
-      return;
-    }
-
+    if (!activePreset) return;
     const capture = await endSession();
-    if (!capture || capture.turns.length === 0) {
-      return;
-    }
+    setLessonOpen(false);
+    if (!capture || capture.turns.length === 0) return;
 
+    setProfileBefore(profile);
     setIsSaving(true);
     try {
       const payload = await reflectLesson({
@@ -207,403 +173,176 @@ export default function App() {
         presetLabel: activePreset.label,
         capture
       });
-
       startTransition(() => {
         setReflection(payload.reflection);
         setProfile(payload.profile);
+        setSummaryOpen(true);
       });
+      // Presets depend on memory (the new plan's goal, whether a mission exists).
+      fetchBootstrap().then(applyBootstrap).catch(() => undefined);
     } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "We could not save this lesson yet."
-      );
+      setSaveError(error instanceof Error ? error.message : "Lucia couldn't save this lesson.");
     } finally {
       setIsSaving(false);
     }
   }
 
+  async function handleLeaveAfterError() {
+    await endSession();
+    setLessonOpen(false);
+  }
+
+  function selectMission() {
+    const mission = bootstrap?.sessionPresets.find((preset) => preset.mode === "mission");
+    if (mission) setActivePreset(mission);
+    setView("oggi");
+  }
+
   if (loadError && !bootstrap) {
     return (
-      <main className="app-shell">
-        <section className="error-state">
-          <p>Parola Viva could not load.</p>
-          <strong>{loadError}</strong>
-        </section>
+      <main className="codex codex-message">
+        <p className="small-caps">Parola Viva</p>
+        <p className="lead">Il codice non si apre.</p>
+        <p className="english">The app couldn't load: {loadError}</p>
       </main>
     );
   }
 
+  if (!bootstrap || !profile || !activePreset) {
+    return (
+      <main className="codex codex-message" aria-busy="true">
+        <p className="small-caps">Parola Viva</p>
+        <p className="lead">Apro il codice…</p>
+      </main>
+    );
+  }
+
+  const folio = profile.sessionCount + 1;
+
   return (
-    <main className="app-shell">
-      <div className="ambient ambient-left" />
-      <div className="ambient ambient-right" />
-
-      <section className="hero-grid">
-        <div className="hero-copy">
-          <span className="eyebrow">Parola Viva</span>
-          <h1>Italian speaking sessions that feel like a real tutor, not a worksheet.</h1>
-          <p className="lede">
-            Low-latency voice practice, living lesson memory, and a contemporary Italy mood
-            that leans more Milan studio, seaside train, and evening aperitivo than
-            tired postcard cliches.
-          </p>
-
-          <div className="hero-meta">
-            <div>
-              <small>Realtime voice</small>
-              <strong>
-                {voiceEngine === "gemini" ? bootstrap?.app.voice ?? "Aoede" : "marin"}
-              </strong>
-            </div>
-            <div>
-              <small>Current focus</small>
-              <strong>{profile?.nextSessionFocus ?? "Conversation confidence"}</strong>
-            </div>
-            <div>
-              <small>Your level</small>
-              <strong>{profile?.levelEstimate ?? "Beginning"}</strong>
-            </div>
-          </div>
-
-          <div className="preset-strip" aria-label="Lesson presets">
-            {bootstrap?.sessionPresets.map((preset) => {
-              const isActive = preset.id === activePreset?.id;
-              return (
-                <button
-                  key={preset.id}
-                  className={isActive ? "preset-chip active" : "preset-chip"}
-                  onClick={() => setActivePreset(preset)}
-                  type="button"
-                >
-                  <span>{preset.label}</span>
-                  <small>{preset.brief}</small>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <section className="studio-panel">
-          <div className="studio-header">
-            <div>
-              <span className="eyebrow">Speaking Studio</span>
-              <h2>{activePreset?.title ?? "Pick a session shape"}</h2>
-            </div>
-            <span className={`status-pill ${status}`}>{statusCopy[status]}</span>
-          </div>
-
-          <div className="voice-stage">
-            <div className={`voice-orb ${status}`} />
-            <p>{activePreset?.focus}</p>
-          </div>
-
-          <div className="session-actions">
-            <button
-              className="primary-action"
-              onClick={handleStart}
-              type="button"
-              disabled={
-                !activePreset ||
-                status === "connecting" ||
-                status === "ready" ||
-                status === "listening" ||
-                status === "speaking"
-              }
-            >
-              Start speaking
-            </button>
-            <button
-              className="secondary-action"
-              onClick={handleEnd}
-              type="button"
-              disabled={status === "idle" || status === "connecting"}
-            >
-              End and save lesson
-            </button>
-          </div>
-
-          <div className="engine-toggle-panel">
-            <span className="audio-input-label">Voice engine</span>
-            <div className="engine-toggle" role="group" aria-label="Voice engine">
+    <>
+      <main className="codex">
+        <header className="running-head">
+          <span className="brand">Codice di {profile.learnerName}</span>
+          <nav className="tabs" aria-label="Notebook sections">
+            {VIEWS.map((item) => (
               <button
+                key={item.id}
                 type="button"
-                className={voiceEngine === "gemini" ? "engine-option active" : "engine-option"}
-                disabled={status === "connecting" || isSessionLive}
-                onClick={() => setVoiceEngine("gemini")}
+                className={view === item.id ? "tab active" : "tab"}
+                aria-current={view === item.id ? "page" : undefined}
+                onClick={() => setView(item.id)}
               >
-                Gemini
+                {item.label}
               </button>
-              <button
-                type="button"
-                className={voiceEngine === "openai" ? "engine-option active" : "engine-option"}
-                disabled={status === "connecting" || isSessionLive}
-                onClick={() => setVoiceEngine("openai")}
-              >
-                OpenAI
-              </button>
-              <button
-                type="button"
-                className={voiceEngine === "gptlive" ? "engine-option active" : "engine-option"}
-                disabled={status === "connecting" || isSessionLive}
-                onClick={() => setVoiceEngine("gptlive")}
-              >
-                GPT-Live
-              </button>
-            </div>
-          </div>
-
-          {voiceEngine === "gemini" && (bootstrap?.app.geminiModels.length ?? 0) > 0 && (
-            <div className="audio-input-panel">
-              <label className="audio-input-label" htmlFor="gemini-model-select">
-                Gemini model
-              </label>
-              <select
-                id="gemini-model-select"
-                className="audio-input-select"
-                value={geminiModel}
-                onChange={(event) => setGeminiModel(event.target.value)}
-                disabled={status === "connecting" || isSessionLive}
-              >
-                {bootstrap?.app.geminiModels.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="audio-input-panel">
-            <label className="audio-input-label" htmlFor="audio-input-select">
-              Microphone
-            </label>
-            <select
-              id="audio-input-select"
-              className="audio-input-select"
-              value={selectedAudioInputId}
-              onChange={(event) => setSelectedAudioInputId(event.target.value)}
-              disabled={status === "connecting"}
-            >
-              {audioInputs.length === 0 && <option value="">Default microphone</option>}
-              {audioInputs.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                  {device.isDefault ? " (Default)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="caption-well">
-            <div>
-              <small>You</small>
-              <p>{liveUserCaption || "When you speak, your live transcript appears here."}</p>
-            </div>
-            <div>
-              <small>Tutor</small>
-              <p>{liveTutorCaption || "The tutor replies with speech first, then text for support."}</p>
-            </div>
-          </div>
-
-          <div className="mic-meter">
-            <div className="mic-meter-header">
-              <small>Mic activity</small>
-              <span>{micLevel > 0.09 ? "Hearing you" : "Waiting for speech"}</span>
-            </div>
-            <div className="mic-meter-header">
-              <small>Reply time</small>
-              <span>
-                last {formatSeconds(lastReplyMs)} · median {formatSeconds(medianReplyMs)}
-                {replyTimesMs.length > 0 ? ` (${replyTimesMs.length} replies)` : ""}
-              </span>
-            </div>
-            <div className="mic-meter-track" aria-hidden="true">
-              <div
-                className="mic-meter-fill"
-                style={{ transform: `scaleX(${Math.max(0.04, micLevel)})` }}
-              />
-            </div>
-          </div>
-
-          {(sessionError || loadError) && (
-            <div className="inline-error">{sessionError ?? loadError}</div>
-          )}
-
-          {eventLog.length > 0 && (
-            <div className="caption-well" aria-live="polite">
-              <div>
-                <small>Connection log</small>
-                {eventLog.slice(0, 6).map((item) => (
-                  <p key={item.id}>
-                    <strong>{item.type}</strong>
-                    {item.detail ? `: ${item.detail}` : ""}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      </section>
-
-      <section className="mobile-dock" aria-label="Mobile speaking controls">
-        <div className="mobile-dock-copy">
-          <small>{activePreset?.label ?? "Session"}</small>
-          <strong>{statusCopy[status]}</strong>
-        </div>
-        <div className="mobile-dock-actions">
-          <button
-            className="primary-action"
-            onClick={handleStart}
-            type="button"
-            disabled={!activePreset || status === "connecting" || isSessionLive}
-          >
-            Start
-          </button>
-          <button
-            className="secondary-action"
-            onClick={handleEnd}
-            type="button"
-            disabled={status === "idle" || status === "connecting"}
-          >
-            End
-          </button>
-        </div>
-      </section>
-
-      <section className="content-grid">
-        <section className="memory-column">
-          <div className="section-heading">
-            <span className="eyebrow">Lesson Memory</span>
-            <h3>Your tutor keeps the thread.</h3>
-          </div>
-
-          <div className="memory-rows">
-            <div className="memory-row">
-              <span>Goals</span>
-              <p>{profile?.goals.join(" / ")}</p>
-            </div>
-            <div className="memory-row">
-              <span>Correction style</span>
-              <p>{profile?.correctionPriorities.join(" / ")}</p>
-            </div>
-            <div className="memory-row">
-              <span>Preferred topics</span>
-              <p>{profile?.preferredTopics.join(" / ")}</p>
-            </div>
-            <div className="memory-row">
-              <span>Tutor notes</span>
-              <p>{profile?.tutorNotes.join(" / ")}</p>
-            </div>
-          </div>
-
-          <div className="recent-sessions">
-            <span className="eyebrow">Recent Sessions</span>
-            {profile?.recentSessions.map((session) => (
-              <article className="session-line" key={session.id}>
-                <div>
-                  <strong>{session.title}</strong>
-                  <p>{session.summary}</p>
-                </div>
-                <div className="session-line-meta">
-                  <span>{formatRelativeDate(session.dateIso)}</span>
-                  <span>{session.durationMinutes} min</span>
-                </div>
-              </article>
             ))}
-          </div>
-        </section>
+            <button
+              type="button"
+              className="tab gear"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+            >
+              ⚙
+            </button>
+          </nav>
+          <span className="folio">f. {folio}r</span>
+        </header>
 
-        <section className="transcript-column">
-          <div className="section-heading">
-            <span className="eyebrow">Conversation Flow</span>
-            <h3>Speech first, text only as a support rail.</h3>
-          </div>
+        <p className="mission-strip">
+          {profile.mission ? (
+            <>
+              <span className="small-caps">Missione</span> {profile.mission.why}
+            </>
+          ) : (
+            <button type="button" className="text-link" onClick={selectMission}>
+              <span className="small-caps">Missione</span> not set yet: five minutes with Lucia →
+            </button>
+          )}
+        </p>
 
-          <div className="transcript-list">
-            {deferredTranscript.length === 0 && (
-              <p className="empty-copy">
-                Start a session and the running conversation will collect here in lightweight
-                transcript form.
-              </p>
-            )}
-            {deferredTranscript.map((turn) => (
-              <div className={`transcript-line ${turn.speaker}`} key={turn.id}>
-                <small>{turn.speaker === "you" ? "You" : "Tutor"}</small>
-                <p>{turn.text}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="culture-section">
-        <div className="section-heading">
-          <span className="eyebrow">Modern Italy Cues</span>
-          <h3>Culture woven into the speaking prompts, not bolted on afterward.</h3>
-        </div>
-
-        <div className="culture-gallery">
-          {heroScenes.map((scene) => (
-            <article className="culture-scene" key={scene.title}>
-              <img alt={scene.title} src={scene.image} />
-              <div>
-                <small>{scene.eyebrow}</small>
-                <h4>{scene.title}</h4>
-                <p>{scene.body}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="reflection-section">
-        <div className="section-heading">
-          <span className="eyebrow">After The Session</span>
-          <h3>Every conversation feeds the next lesson.</h3>
-        </div>
-
-        {isSaving && <p className="saving-copy">Saving your lesson memory and next-step drills.</p>}
-
-        {reflection ? (
-          <div className="reflection-grid">
-            <div>
-              <small>Lesson arc</small>
-              <h4>{reflection.title}</h4>
-              <p>{reflection.summary}</p>
-            </div>
-            <div>
-              <small>What worked</small>
-              <ul>
-                {reflection.strengths.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <small>Next speaking drills</small>
-              <ul>
-                {reflection.nextDrills.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <small>Fresh vocabulary</small>
-              <ul>
-                {reflection.vocabulary.map((item) => (
-                  <li key={item.italian}>
-                    {item.italian} - {item.english}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ) : (
-          <p className="empty-copy">
-            End a lesson and Parola Viva writes a short memory note, new vocabulary list,
-            and next-session focus for the tutor.
+        {saveError && (
+          <p className="save-error" role="alert">
+            {saveError}
           </p>
         )}
-      </section>
-    </main>
+
+        {view === "oggi" && (
+          <HomeSpread
+            profile={profile}
+            presets={bootstrap.sessionPresets}
+            activePreset={activePreset}
+            onSelectPreset={setActivePreset}
+            onStart={handleStart}
+            onOpenWords={() => setView("parole")}
+            onOpenDiary={() => setView("diario")}
+            startDisabled={status === "connecting" || isSessionLive || isSaving}
+          />
+        )}
+        {view === "parole" && <WordsPage profile={profile} />}
+        {view === "diario" && <DiaryPage profile={profile} onStartMission={selectMission} />}
+      </main>
+
+      {preview === "lesson" && (
+        <LessonView
+          preset={activePreset}
+          status="speaking"
+          error={null}
+          liveTutorCaption="Perfetto! E adesso tu: di dove sei?"
+          liveUserCaption=""
+          transcript={PREVIEW_TRANSCRIPT}
+          micLevel={0.2}
+          replyTimesMs={[1180, 1260, 1320]}
+          onEnd={() => undefined}
+          onLeaveAfterError={() => undefined}
+        />
+      )}
+      {preview === "saving" && <SavingView />}
+      {preview === "summary" && (
+        <SummarySheet reflection={PREVIEW_REFLECTION} before={profile} after={profile} onClose={() => undefined} />
+      )}
+
+      {lessonOpen && (
+        <LessonView
+          preset={activePreset}
+          status={status}
+          error={sessionError}
+          liveTutorCaption={activeSession.liveTutorCaption}
+          liveUserCaption={activeSession.liveUserCaption}
+          transcript={activeSession.transcript}
+          micLevel={activeSession.micLevel}
+          replyTimesMs={activeSession.replyTimesMs}
+          onEnd={handleEnd}
+          onLeaveAfterError={handleLeaveAfterError}
+        />
+      )}
+
+      {isSaving && <SavingView />}
+
+      {summaryOpen && reflection && (
+        <SummarySheet
+          reflection={reflection}
+          before={profileBefore}
+          after={profile}
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
+
+      <SettingsDrawer
+        open={settingsOpen || preview === "settings"}
+        onClose={() => setSettingsOpen(false)}
+        locked={status === "connecting" || isSessionLive}
+        voiceEngine={voiceEngine}
+        onVoiceEngine={setVoiceEngine}
+        geminiModels={bootstrap.app.geminiModels}
+        geminiModel={geminiModel}
+        onGeminiModel={setGeminiModel}
+        audioInputs={audioInputs}
+        selectedAudioInputId={selectedAudioInputId}
+        onAudioInput={setSelectedAudioInputId}
+        replyTimesMs={activeSession.replyTimesMs}
+        eventLog={eventLog}
+        showDebug={showDebug}
+      />
+    </>
   );
 }
