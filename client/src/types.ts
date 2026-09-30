@@ -77,7 +77,14 @@ export type OpenAiLiveSessionPayload = {
   expiresAt?: number;
 };
 
-export type VoiceEngine = "gemini" | "openai";
+export type GptLiveSessionPayload = {
+  sessionId: string | null;
+  sdp: string;
+  model: string;
+  voice: string;
+};
+
+export type VoiceEngine = "gemini" | "openai" | "gptlive";
 
 export type LessonReflection = {
   title: string;

@@ -43,7 +43,8 @@ app.get("/api/health", async (_request, response) => {
     models: {
       gemini: defaultGeminiModel(),
       geminiSelectable: GEMINI_LIVE_MODELS.map((option) => option.id),
-      openai: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1"
+      openai: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1",
+      gptLive: process.env.OPENAI_LIVE_MODEL ?? "gpt-live-1"
     }
   });
 });
@@ -135,7 +136,8 @@ app.post("/api/live/openai-session", async (request, response) => {
           }),
           audio: {
             input: {
-              transcription: { model: "gpt-4o-mini-transcribe" },
+              // gpt-4o-mini-transcribe is deprecated (shutdown 2027-02-26).
+              transcription: { model: "gpt-live-transcribe" },
               // High eagerness: keep semantic turn detection (doesn't cut a
               // hesitant learner off mid-thought) but respond much sooner.
               turn_detection: { type: "semantic_vad", eagerness: "high" }
@@ -170,6 +172,74 @@ app.post("/api/live/openai-session", async (request, response) => {
     model,
     voice,
     expiresAt: secret.expires_at
+  });
+});
+
+// GPT-Live: the browser sends its WebRTC offer here and the server creates the
+// session, so neither the API key nor a client secret reaches the browser.
+app.post("/api/live/gpt-live-session", async (request, response) => {
+  if (!process.env.OPENAI_API_KEY) {
+    response.status(500).send("OPENAI_API_KEY is missing.");
+    return;
+  }
+
+  const { focus, presetLabel, sdp } = request.body as {
+    focus?: string;
+    presetLabel?: string;
+    sdp?: string;
+  };
+
+  if (!focus || !presetLabel || !sdp?.trim()) {
+    response.status(400).send("focus, presetLabel, and sdp are required.");
+    return;
+  }
+
+  const memory = await loadMemory();
+  const model = process.env.OPENAI_LIVE_MODEL ?? "gpt-live-1";
+  const voice = process.env.OPENAI_LIVE_VOICE ?? "marin";
+
+  const liveResponse = await fetch("https://api.openai.com/v1/live/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      // No delegation: the tutor needs no tools, so only voice time is billed.
+      session: {
+        model,
+        instructions: buildTutorInstructions(memory, {
+          focus,
+          presetLabel,
+          engine: "openai"
+        }),
+        audio: { output: { voice } }
+      },
+      transport: { type: "webrtc", sdp }
+    })
+  });
+
+  if (!liveResponse.ok) {
+    const detail = await liveResponse.text();
+    response.status(502).send(`OpenAI could not create a GPT-Live session: ${detail}`);
+    return;
+  }
+
+  const result = (await liveResponse.json()) as {
+    session?: { id?: string };
+    transport?: { sdp?: string };
+  };
+
+  if (!result.transport?.sdp) {
+    response.status(502).send("OpenAI returned no SDP answer for the GPT-Live session.");
+    return;
+  }
+
+  response.json({
+    sessionId: result.session?.id ?? null,
+    sdp: result.transport.sdp,
+    model,
+    voice
   });
 });
 

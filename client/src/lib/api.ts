@@ -1,5 +1,6 @@
 import type {
   BootstrapPayload,
+  GptLiveSessionPayload,
   LiveSessionPayload,
   OpenAiLiveSessionPayload,
   ReflectionPayload,
@@ -55,6 +56,24 @@ export async function createOpenAiLiveSession(input: {
   );
 
   return response.json() as Promise<OpenAiLiveSessionPayload>;
+}
+
+export async function createGptLiveSession(input: {
+  focus: string;
+  presetLabel: string;
+  sdp: string;
+}): Promise<GptLiveSessionPayload> {
+  const response = await assertOk(
+    await fetch(`${API_BASE_URL}/api/live/gpt-live-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    })
+  );
+
+  return response.json() as Promise<GptLiveSessionPayload>;
 }
 
 export async function reflectLesson(input: {

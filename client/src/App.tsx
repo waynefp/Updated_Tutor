@@ -8,6 +8,7 @@ import {
 import { fetchBootstrap, reflectLesson } from "./lib/api";
 import { useRealtimeTutorSession } from "./hooks/useRealtimeTutorSession";
 import { useOpenAiRealtimeSession } from "./hooks/useOpenAiRealtimeSession";
+import { useGptLiveSession } from "./hooks/useGptLiveSession";
 import { medianMs } from "./lib/replyTimer";
 import type {
   AudioInputDevice,
@@ -62,18 +63,23 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [audioInputs, setAudioInputs] = useState<AudioInputDevice[]>([]);
   const [selectedAudioInputId, setSelectedAudioInputId] = useState("");
-  const [voiceEngine, setVoiceEngine] = useState<VoiceEngine>(() =>
-    window.localStorage.getItem(voiceEngineStorageKey) === "openai"
-      ? "openai"
-      : "gemini"
-  );
+  const [voiceEngine, setVoiceEngine] = useState<VoiceEngine>(() => {
+    const saved = window.localStorage.getItem(voiceEngineStorageKey);
+    return saved === "openai" || saved === "gptlive" ? saved : "gemini";
+  });
   const [geminiModel, setGeminiModel] = useState(
     () => window.localStorage.getItem(geminiModelStorageKey) ?? ""
   );
 
   const geminiSession = useRealtimeTutorSession();
   const openAiSession = useOpenAiRealtimeSession();
-  const activeSession = voiceEngine === "openai" ? openAiSession : geminiSession;
+  const gptLiveSession = useGptLiveSession();
+  const activeSession =
+    voiceEngine === "openai"
+      ? openAiSession
+      : voiceEngine === "gptlive"
+        ? gptLiveSession
+        : geminiSession;
 
   const {
     endSession,
@@ -245,7 +251,7 @@ export default function App() {
             <div>
               <small>Realtime voice</small>
               <strong>
-                {voiceEngine === "openai" ? "marin" : bootstrap?.app.voice ?? "marin"}
+                {voiceEngine === "gemini" ? bootstrap?.app.voice ?? "Aoede" : "marin"}
               </strong>
             </div>
             <div>
@@ -333,6 +339,14 @@ export default function App() {
                 onClick={() => setVoiceEngine("openai")}
               >
                 OpenAI
+              </button>
+              <button
+                type="button"
+                className={voiceEngine === "gptlive" ? "engine-option active" : "engine-option"}
+                disabled={status === "connecting" || isSessionLive}
+                onClick={() => setVoiceEngine("gptlive")}
+              >
+                GPT-Live
               </button>
             </div>
           </div>
